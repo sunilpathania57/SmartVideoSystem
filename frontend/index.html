@@ -2,30 +2,83 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
     <title>Smart Video Management System</title>
 
-    <link rel="stylesheet" href="/static/style.css">
+    <link
+        rel="stylesheet"
+        href="/static/style.css"
+    >
+
 </head>
+
 
 <body>
 
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
+
     <header>
+
         <h1>Smart Video Management System</h1>
+
         <p>Camera Dashboard</p>
+
     </header>
+
 
 
     <main>
 
-        <!-- Add Camera Form -->
+
+        <!-- =================================================
+             LIVE CAMERA VIEW
+        ================================================== -->
+
+        <section class="card">
+
+    <h2 id="liveCameraTitle">
+        Live Camera View
+    </h2>
+
+    <div class="video-container">
+
+        <img
+    id="liveVideo"
+    alt="Live camera video"
+    style="display: none;"
+>
+
+        <p id="videoMessage">
+            Select a camera and click "View Live".
+        </p>
+
+    </div>
+
+</section>
+
+
+        <!-- =================================================
+             ADD CAMERA
+        ================================================== -->
+
         <section class="card">
 
             <h2>Add Camera</h2>
 
+
             <form id="cameraForm">
+
+
+                <!-- Camera Name -->
 
                 <input
                     type="text"
@@ -34,6 +87,9 @@
                     required
                 >
 
+
+                <!-- IP Address -->
+
                 <input
                     type="text"
                     id="ip_address"
@@ -41,10 +97,80 @@
                     required
                 >
 
-                <select id="status">
-                    <option value="online">Online</option>
-                    <option value="offline">Offline</option>
+
+                <!-- Camera Type -->
+
+                <select id="camera_type">
+
+                    <option value="IP">
+                        IP Camera
+                    </option>
+
+                    <option value="USB">
+                        USB Camera
+                    </option>
+
+                    <option value="NORMAL">
+                        Normal Camera
+                    </option>
+
                 </select>
+
+
+                <!-- Device Index -->
+
+                <input
+                    type="number"
+                    id="device_index"
+                    placeholder="Device Index"
+                    value="0"
+                    min="0"
+                >
+
+
+                <!-- Location -->
+
+                <input
+                    type="text"
+                    id="location"
+                    placeholder="Location"
+                >
+
+
+                <!-- Username -->
+
+                <input
+                    type="text"
+                    id="username"
+                    placeholder="Username"
+                >
+
+
+                <!-- RTSP URL -->
+
+                <input
+                    type="text"
+                    id="rtsp_url"
+                    placeholder="RTSP URL"
+                >
+
+
+                <!-- Status -->
+
+                <select id="status">
+
+                    <option value="online">
+                        Online
+                    </option>
+
+                    <option value="offline">
+                        Offline
+                    </option>
+
+                </select>
+
+
+                <!-- Add Button -->
 
                 <button type="submit">
                     Add Camera
@@ -55,21 +181,28 @@
         </section>
 
 
-        <!-- Camera List -->
+
+        <!-- =================================================
+             CAMERA LIST
+        ================================================== -->
+
         <section class="card">
 
             <h2>Camera List</h2>
 
-            <div id="cameraList">
-                Loading cameras...
-            </div>
+            <div id="cameraList" class="camera-grid">
+    Loading cameras...
+</div>
 
         </section>
+
 
     </main>
 
 
+
     <script src="/static/app.js"></script>
+
 
 </body>
 

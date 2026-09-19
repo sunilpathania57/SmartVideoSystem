@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Smart Video Management System</title>
+
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+
+<body>
+
+    <header>
+        <h1>Smart Video Management System</h1>
+        <p>Camera Dashboard</p>
+    </header>
+
+
+    <main>
+
+        <!-- Add Camera Form -->
+        <section class="card">
+
+            <h2>Add Camera</h2>
+
+            <form id="cameraForm">
+
+                <input
+                    type="text"
+                    id="name"
+                    placeholder="Camera Name"
+                    required
+                >
+
+                <input
+                    type="text"
+                    id="ip_address"
+                    placeholder="IP Address"
+                    required
+                >
+
+                <select id="status">
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                </select>
+
+                <button type="submit">
+                    Add Camera
+                </button>
+
+            </form>
+
+        </section>
+
+
+        <!-- Camera List -->
+        <section class="card">
+
+            <h2>Camera List</h2>
+
+            <div id="cameraList">
+                Loading cameras...
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script src="/static/app.js"></script>
+
+</body>
+
+</html>

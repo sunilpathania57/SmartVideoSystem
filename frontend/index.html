@@ -22,15 +22,20 @@
 
 <body>
 
+
     <!-- =====================================================
          HEADER
     ====================================================== -->
 
     <header>
 
-        <h1>Smart Video Management System</h1>
+        <h1>
+            Smart Video Management System
+        </h1>
 
-        <p>Camera Dashboard</p>
+        <p>
+            Camera Dashboard
+        </p>
 
     </header>
 
@@ -45,25 +50,31 @@
 
         <section class="card">
 
-    <h2 id="liveCameraTitle">
-        Live Camera View
-    </h2>
+            <h2 id="liveCameraTitle">
+                Live Camera View
+            </h2>
 
-    <div class="video-container">
 
-        <img
-    id="liveVideo"
-    alt="Live camera video"
-    style="display: none;"
->
+            <div class="video-container">
 
-        <p id="videoMessage">
-            Select a camera and click "View Live".
-        </p>
+                <img
+                    id="liveVideo"
+                    alt="Live camera video"
+                    style="display: none;"
+                >
 
-    </div>
 
-</section>
+                <p id="videoMessage">
+
+                    Select a camera and click
+                    "View Live".
+
+                </p>
+
+            </div>
+
+        </section>
+
 
 
         <!-- =================================================
@@ -72,7 +83,9 @@
 
         <section class="card">
 
-            <h2>Add Camera</h2>
+            <h2>
+                Add Camera
+            </h2>
 
 
             <form id="cameraForm">
@@ -170,11 +183,14 @@
                 </select>
 
 
-                <!-- Add Button -->
+                <!-- Add Camera -->
 
-                <button type="submit">
+                <button
+                    type="submit"
+                >
                     Add Camera
                 </button>
+
 
             </form>
 
@@ -188,11 +204,40 @@
 
         <section class="card">
 
-            <h2>Camera List</h2>
+            <h2>
+                Camera List
+            </h2>
 
-            <div id="cameraList" class="camera-grid">
-    Loading cameras...
-</div>
+
+            <div
+                id="cameraList"
+                class="camera-grid"
+            >
+
+                Loading cameras...
+
+            </div>
+
+        </section>
+
+
+
+        <!-- =================================================
+             RECORDING HISTORY
+        ================================================== -->
+
+        <section class="card">
+
+            <h2>
+                Recording History
+            </h2>
+
+
+            <div id="recordingList">
+
+                Loading recordings...
+
+            </div>
 
         </section>
 
@@ -201,7 +246,13 @@
 
 
 
-    <script src="/static/app.js"></script>
+    <!-- =====================================================
+         JAVASCRIPT
+    ====================================================== -->
+
+    <script
+        src="/static/app.js"
+    ></script>
 
 
 </body>

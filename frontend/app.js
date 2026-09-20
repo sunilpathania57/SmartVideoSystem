@@ -5,16 +5,25 @@
 
 
 // ============================================================
-// WHEN PAGE IS READY
+// RECORDING STATE
+// ============================================================
+
+const recordingCameras = new Set();
+
+
+// ============================================================
+// PAGE READY
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", () => {
 
-    console.log("Smart Video System JavaScript started.");
+    console.log("Smart Video System started.");
 
     setupCameraForm();
 
     loadCameras();
+
+    loadRecordings();
 
 });
 
@@ -31,12 +40,9 @@ async function loadCameras() {
 
     if (!cameraList) {
 
-        console.error(
-            "cameraList element not found."
-        );
+        console.error("cameraList not found.");
 
         return;
-
     }
 
 
@@ -46,25 +52,13 @@ async function loadCameras() {
 
     try {
 
-        console.log(
-            "Requesting GET /cameras..."
-        );
-
-
         const response =
             await fetch(
                 "/cameras",
                 {
-                    method: "GET",
                     cache: "no-store"
                 }
             );
-
-
-        console.log(
-            "Camera API status:",
-            response.status
-        );
 
 
         if (!response.ok) {
@@ -80,46 +74,26 @@ async function loadCameras() {
             await response.json();
 
 
-        console.log(
-            "Cameras received:",
-            cameras
-        );
-
-
         cameraList.innerHTML = "";
 
 
-        // ----------------------------------------------------
-        // NO CAMERAS
-        // ----------------------------------------------------
-
-        if (
-            !Array.isArray(cameras) ||
-            cameras.length === 0
-        ) {
+        if (!Array.isArray(cameras) || cameras.length === 0) {
 
             cameraList.innerHTML =
                 "<p>No cameras found.</p>";
 
             return;
-
         }
 
 
-        // ----------------------------------------------------
-        // CREATE CAMERA CARDS
-        // ----------------------------------------------------
+        cameras.forEach(camera => {
 
-        cameras.forEach(
-            camera => {
+            createCameraCard(
+                camera,
+                cameraList
+            );
 
-                createCameraCard(
-                    camera,
-                    cameraList
-                );
-
-            }
-        );
+        });
 
     }
 
@@ -127,7 +101,7 @@ async function loadCameras() {
     catch (error) {
 
         console.error(
-            "Error loading cameras:",
+            "Camera loading error:",
             error
         );
 
@@ -139,7 +113,6 @@ async function loadCameras() {
             </p>
 
             <p>
-                Error:
                 ${escapeHtml(error.message)}
             </p>
 
@@ -167,31 +140,21 @@ function createCameraCard(
         "camera-card";
 
 
-    // --------------------------------------------------------
-    // CAMERA STATUS
-    // --------------------------------------------------------
+    const cameraType =
+        String(
+            camera.camera_type || "IP"
+        ).toUpperCase();
+
 
     const status =
-        camera.status || "offline";
+        String(
+            camera.status || "offline"
+        ).toLowerCase();
 
-
-    // --------------------------------------------------------
-    // CAMERA TYPE
-    // --------------------------------------------------------
-
-    const cameraType =
-        camera.camera_type || "IP";
-
-
-    // --------------------------------------------------------
-    // DEVICE INDEX
-    // --------------------------------------------------------
 
     const deviceIndex =
-        (
-            camera.device_index !== null &&
-            camera.device_index !== undefined
-        )
+        camera.device_index !== null &&
+        camera.device_index !== undefined
             ? camera.device_index
             : "-";
 
@@ -200,35 +163,34 @@ function createCameraCard(
     // CHECK VIDEO SOURCE
     // --------------------------------------------------------
 
-    let hasVideoSource = false;
+    const hasUsbSource =
+        cameraType === "USB" &&
+        camera.device_index !== null &&
+        camera.device_index !== undefined;
 
 
-    if (
-        cameraType.toUpperCase() === "USB"
-        &&
-        camera.device_index !== null
-        &&
-        camera.device_index !== undefined
-    ) {
-
-        hasVideoSource = true;
-
-    }
+    const hasRtspSource =
+        cameraType === "IP" &&
+        camera.rtsp_url;
 
 
-    if (
-        cameraType.toUpperCase() === "IP"
-        &&
-        camera.rtsp_url
-    ) {
-
-        hasVideoSource = true;
-
-    }
+    const hasVideoSource =
+        hasUsbSource ||
+        hasRtspSource;
 
 
     // --------------------------------------------------------
-    // CREATE CARD
+    // RECORDING STATE
+    // --------------------------------------------------------
+
+    const isRecording =
+        recordingCameras.has(
+            camera.id
+        );
+
+
+    // --------------------------------------------------------
+    // CAMERA CARD
     // --------------------------------------------------------
 
     cameraDiv.innerHTML = `
@@ -244,11 +206,9 @@ function createCameraCard(
             <span
                 class="status-badge ${escapeHtml(status)}"
             >
-
                 ${escapeHtml(
                     status
                 ).toUpperCase()}
-
             </span>
 
         </div>
@@ -289,19 +249,84 @@ function createCameraCard(
                 ${deviceIndex}
             </p>
 
+
+            <p>
+                <strong>Recording:</strong>
+
+                <span
+                    class="recording-status"
+                    style="
+                        font-weight:bold;
+                        color:${isRecording ? "red" : "inherit"};
+                    "
+                >
+
+                    ${
+                        isRecording
+                            ? "🔴 RECORDING"
+                            : "Not Recording"
+                    }
+
+                </span>
+
+            </p>
+
         </div>
 
 
         <div class="camera-card-actions">
 
-            <button
-                class="live-button"
-            >
-                View Live
-            </button>
+            ${
+                hasVideoSource
+                    ? `
+                        <button
+                            type="button"
+                            class="live-button"
+                        >
+                            View Live
+                        </button>
+                      `
+                    : `
+                        <button
+                            type="button"
+                            disabled
+                        >
+                            No Video Source
+                        </button>
+                      `
+            }
+
+
+            ${
+                hasVideoSource && !isRecording
+                    ? `
+                        <button
+                            type="button"
+                            class="record-button"
+                        >
+                            🔴 Start Recording
+                        </button>
+                      `
+                    : ""
+            }
+
+
+            ${
+                hasVideoSource && isRecording
+                    ? `
+                        <button
+                            type="button"
+                            class="stop-record-button"
+                        >
+                            ⏹ Stop Recording
+                        </button>
+                      `
+                    : ""
+            }
 
 
             <button
+                type="button"
                 class="edit-button"
             >
                 Edit
@@ -309,6 +334,7 @@ function createCameraCard(
 
 
             <button
+                type="button"
                 class="delete-button"
             >
                 Delete
@@ -319,9 +345,9 @@ function createCameraCard(
     `;
 
 
-    // --------------------------------------------------------
-    // VIEW LIVE BUTTON
-    // --------------------------------------------------------
+    // ========================================================
+    // VIEW LIVE
+    // ========================================================
 
     const liveButton =
         cameraDiv.querySelector(
@@ -329,7 +355,7 @@ function createCameraCard(
         );
 
 
-    if (hasVideoSource) {
+    if (liveButton) {
 
         liveButton.addEventListener(
             "click",
@@ -345,19 +371,62 @@ function createCameraCard(
 
     }
 
-    else {
 
-        liveButton.disabled = true;
+    // ========================================================
+    // START RECORDING
+    // ========================================================
 
-        liveButton.textContent =
-            "No Video Source";
+    const recordButton =
+        cameraDiv.querySelector(
+            ".record-button"
+        );
+
+
+    if (recordButton) {
+
+        recordButton.addEventListener(
+            "click",
+            () => {
+
+                startRecording(
+                    camera.id
+                );
+
+            }
+        );
 
     }
 
 
-    // --------------------------------------------------------
-    // EDIT BUTTON
-    // --------------------------------------------------------
+    // ========================================================
+    // STOP RECORDING
+    // ========================================================
+
+    const stopButton =
+        cameraDiv.querySelector(
+            ".stop-record-button"
+        );
+
+
+    if (stopButton) {
+
+        stopButton.addEventListener(
+            "click",
+            () => {
+
+                stopRecording(
+                    camera.id
+                );
+
+            }
+        );
+
+    }
+
+
+    // ========================================================
+    // EDIT
+    // ========================================================
 
     const editButton =
         cameraDiv.querySelector(
@@ -377,9 +446,9 @@ function createCameraCard(
     );
 
 
-    // --------------------------------------------------------
-    // DELETE BUTTON
-    // --------------------------------------------------------
+    // ========================================================
+    // DELETE
+    // ========================================================
 
     const deleteButton =
         cameraDiv.querySelector(
@@ -399,13 +468,355 @@ function createCameraCard(
     );
 
 
-    // --------------------------------------------------------
-    // ADD CARD TO PAGE
-    // --------------------------------------------------------
-
     cameraList.appendChild(
         cameraDiv
     );
+
+}
+
+
+// ============================================================
+// START RECORDING
+// ============================================================
+
+async function startRecording(cameraId) {
+
+    // Stop preview first because the webcam
+    // may not support two simultaneous capture sessions.
+    stopLiveCamera();
+
+
+    try {
+
+        console.log(
+            "Starting recording:",
+            cameraId
+        );
+
+
+        const response =
+            await fetch(
+                `/record/start/${cameraId}`,
+                {
+                    method: "POST"
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                responseText
+            );
+
+        }
+
+
+        const result =
+            JSON.parse(responseText);
+
+
+        console.log(
+            "Recording started:",
+            result
+        );
+
+
+        // Mark camera as recording
+        recordingCameras.add(
+            Number(cameraId)
+        );
+
+
+        // Immediately redraw buttons
+        await loadCameras();
+
+
+        alert(
+            "Recording started successfully."
+        );
+
+    }
+
+
+    catch (error) {
+
+        console.error(
+            "Start recording error:",
+            error
+        );
+
+
+        alert(
+            "Could not start recording.\n\n" +
+            error.message
+        );
+
+    }
+
+}
+
+
+// ============================================================
+// STOP RECORDING
+// ============================================================
+
+async function stopRecording(cameraId) {
+
+    try {
+
+        console.log(
+            "Stopping recording:",
+            cameraId
+        );
+
+
+        const response =
+            await fetch(
+                `/record/stop/${cameraId}`,
+                {
+                    method: "POST"
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                responseText
+            );
+
+        }
+
+
+        const result =
+            JSON.parse(responseText);
+
+
+        console.log(
+            "Recording stopped:",
+            result
+        );
+
+
+        // Remove recording state
+        recordingCameras.delete(
+            Number(cameraId)
+        );
+
+
+        // Refresh camera buttons
+        await loadCameras();
+
+
+        // Refresh recording history
+        await loadRecordings();
+
+
+        alert(
+            "Recording stopped successfully.\n\n" +
+            `Duration: ${result.duration_seconds} seconds`
+        );
+
+    }
+
+
+    catch (error) {
+
+        console.error(
+            "Stop recording error:",
+            error
+        );
+
+
+        alert(
+            "Could not stop recording.\n\n" +
+            error.message
+        );
+
+    }
+
+}
+
+
+// ============================================================
+// LOAD RECORDINGS
+// ============================================================
+
+async function loadRecordings() {
+
+    const recordingList =
+        document.getElementById(
+            "recordingList"
+        );
+
+
+    if (!recordingList) {
+
+        return;
+
+    }
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/recordings",
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Failed to load recordings"
+            );
+
+        }
+
+
+        const recordings =
+            await response.json();
+
+
+        recordingList.innerHTML = "";
+
+
+        if (
+            !Array.isArray(recordings) ||
+            recordings.length === 0
+        ) {
+
+            recordingList.innerHTML =
+                "<p>No recordings found.</p>";
+
+            return;
+
+        }
+
+
+        recordings.forEach(
+            recording => {
+
+                const item =
+                    document.createElement(
+                        "div"
+                    );
+
+
+                item.className =
+                    "recording-item";
+
+
+                item.innerHTML = `
+
+                    <div>
+
+                        <strong>
+                            Recording #${recording.id}
+                        </strong>
+
+                        <p>
+                            Camera ID:
+                            ${recording.camera_id}
+                        </p>
+
+                        <p>
+                            File:
+                            ${escapeHtml(
+                                recording.filename
+                            )}
+                        </p>
+
+                        <p>
+                            Start:
+                            ${escapeHtml(
+                                recording.start_time || "-"
+                            )}
+                        </p>
+
+                        <p>
+                            End:
+                            ${escapeHtml(
+                                recording.end_time || "-"
+                            )}
+                        </p>
+
+                        <p>
+                            Duration:
+                            ${
+                                recording.duration_seconds ?? 0
+                            }
+                            seconds
+                        </p>
+
+                        <p>
+                            Status:
+                            ${escapeHtml(
+                                recording.status || "-"
+                            )}
+                        </p>
+
+                    </div>
+
+
+                    <div class="recording-actions">
+
+                        <a
+    href="/recordings/${recording.id}/video"
+    target="_blank"
+>
+    <button type="button">
+        ▶ Play
+    </button>
+</a>
+
+<a
+    href="/recordings/${recording.id}/download"
+>
+    <button type="button">
+        ⬇ Download
+    </button>
+</a>
+
+                    </div>
+
+                `;
+
+
+                recordingList.appendChild(
+                    item
+                );
+
+            }
+        );
+
+    }
+
+
+    catch (error) {
+
+        console.error(
+            "Recording history error:",
+            error
+        );
+
+
+        recordingList.innerHTML =
+            "<p>Unable to load recordings.</p>";
+
+    }
 
 }
 
@@ -439,18 +850,10 @@ function viewLiveCamera(
 
     if (!liveVideo) {
 
-        alert(
-            "Live video element not found."
-        );
-
         return;
 
     }
 
-
-    // --------------------------------------------------------
-    // CHANGE TITLE
-    // --------------------------------------------------------
 
     if (liveCameraTitle) {
 
@@ -460,25 +863,13 @@ function viewLiveCamera(
     }
 
 
-    // --------------------------------------------------------
-    // SET CAMERA STREAM
-    // --------------------------------------------------------
-
     liveVideo.src =
         `/video-feed/${cameraId}`;
 
 
-    // --------------------------------------------------------
-    // SHOW VIDEO
-    // --------------------------------------------------------
-
     liveVideo.style.display =
         "block";
 
-
-    // --------------------------------------------------------
-    // HIDE MESSAGE
-    // --------------------------------------------------------
 
     if (videoMessage) {
 
@@ -487,10 +878,6 @@ function viewLiveCamera(
 
     }
 
-
-    // --------------------------------------------------------
-    // SCROLL TO VIDEO
-    // --------------------------------------------------------
 
     const videoContainer =
         document.querySelector(
@@ -501,21 +888,11 @@ function viewLiveCamera(
     if (videoContainer) {
 
         videoContainer.scrollIntoView({
-
             behavior: "smooth",
-
             block: "center"
-
         });
 
     }
-
-
-    console.log(
-        "Viewing camera:",
-        cameraId,
-        cameraName
-    );
 
 }
 
@@ -573,7 +950,7 @@ function stopLiveCamera() {
 
 
 // ============================================================
-// SETUP ADD CAMERA FORM
+// ADD CAMERA FORM
 // ============================================================
 
 function setupCameraForm() {
@@ -586,10 +963,6 @@ function setupCameraForm() {
 
     if (!form) {
 
-        console.error(
-            "cameraForm element not found."
-        );
-
         return;
 
     }
@@ -601,10 +974,6 @@ function setupCameraForm() {
 
             event.preventDefault();
 
-
-            // ------------------------------------------------
-            // DEVICE INDEX
-            // ------------------------------------------------
 
             const deviceIndexElement =
                 document.getElementById(
@@ -630,71 +999,45 @@ function setupCameraForm() {
                         deviceIndexValue
                     );
 
-
-                if (
-                    !Number.isInteger(
-                        deviceIndex
-                    )
-                    ||
-                    deviceIndex < 0
-                ) {
-
-                    alert(
-                        "Device Index must be 0 or greater."
-                    );
-
-                    return;
-
-                }
-
             }
 
-
-            // ------------------------------------------------
-            // CAMERA DATA
-            // ------------------------------------------------
 
             const camera = {
 
                 name:
-                    getInputValue("name"),
-
+                    getInputValue(
+                        "name"
+                    ),
 
                 ip_address:
                     getInputValue(
                         "ip_address"
                     ),
 
-
                 camera_type:
                     getInputValue(
                         "camera_type"
                     ),
-
 
                 location:
                     getInputValue(
                         "location"
                     ),
 
-
                 username:
                     getInputValue(
                         "username"
                     ),
-
 
                 rtsp_url:
                     getInputValue(
                         "rtsp_url"
                     ),
 
-
                 status:
                     getInputValue(
                         "status"
                     ),
-
 
                 device_index:
                     deviceIndex
@@ -702,35 +1045,7 @@ function setupCameraForm() {
             };
 
 
-            // ------------------------------------------------
-            // VALIDATION
-            // ------------------------------------------------
-
-            if (
-                camera.name === "" ||
-                camera.ip_address === ""
-            ) {
-
-                alert(
-                    "Camera name and IP address are required."
-                );
-
-                return;
-
-            }
-
-
-            // ------------------------------------------------
-            // SEND POST
-            // ------------------------------------------------
-
             try {
-
-                console.log(
-                    "Adding camera:",
-                    camera
-                );
-
 
                 const response =
                     await fetch(
@@ -740,10 +1055,8 @@ function setupCameraForm() {
                             method: "POST",
 
                             headers: {
-
                                 "Content-Type":
                                     "application/json"
-
                             },
 
                             body:
@@ -757,16 +1070,6 @@ function setupCameraForm() {
 
                 if (!response.ok) {
 
-                    const errorText =
-                        await response.text();
-
-
-                    console.error(
-                        "Add camera failed:",
-                        errorText
-                    );
-
-
                     throw new Error(
                         `Server returned ${response.status}`
                     );
@@ -774,24 +1077,9 @@ function setupCameraForm() {
                 }
 
 
-                const newCamera =
-                    await response.json();
-
-
-                console.log(
-                    "Camera added:",
-                    newCamera
-                );
-
-
-                // ------------------------------------------------
-                // RESET FORM
-                // ------------------------------------------------
-
                 form.reset();
 
 
-                // Restore device index
                 if (deviceIndexElement) {
 
                     deviceIndexElement.value =
@@ -800,15 +1088,11 @@ function setupCameraForm() {
                 }
 
 
-                // ------------------------------------------------
-                // RELOAD LIST
-                // ------------------------------------------------
-
                 await loadCameras();
 
 
                 alert(
-                    "Camera added successfully!"
+                    "Camera added successfully."
                 );
 
             }
@@ -823,8 +1107,7 @@ function setupCameraForm() {
 
 
                 alert(
-                    "Failed to add camera: " +
-                    error.message
+                    "Failed to add camera."
                 );
 
             }
@@ -839,9 +1122,7 @@ function setupCameraForm() {
 // EDIT CAMERA
 // ============================================================
 
-async function editCamera(
-    cameraId
-) {
+async function editCamera(cameraId) {
 
     try {
 
@@ -870,10 +1151,7 @@ async function editCamera(
                 camera.name || ""
             );
 
-
-        if (newName === null) {
-            return;
-        }
+        if (newName === null) return;
 
 
         const newIP =
@@ -882,10 +1160,7 @@ async function editCamera(
                 camera.ip_address || ""
             );
 
-
-        if (newIP === null) {
-            return;
-        }
+        if (newIP === null) return;
 
 
         const newType =
@@ -894,10 +1169,7 @@ async function editCamera(
                 camera.camera_type || "IP"
             );
 
-
-        if (newType === null) {
-            return;
-        }
+        if (newType === null) return;
 
 
         const newLocation =
@@ -906,10 +1178,7 @@ async function editCamera(
                 camera.location || ""
             );
 
-
-        if (newLocation === null) {
-            return;
-        }
+        if (newLocation === null) return;
 
 
         const newUsername =
@@ -918,10 +1187,7 @@ async function editCamera(
                 camera.username || ""
             );
 
-
-        if (newUsername === null) {
-            return;
-        }
+        if (newUsername === null) return;
 
 
         const newRtsp =
@@ -930,10 +1196,7 @@ async function editCamera(
                 camera.rtsp_url || ""
             );
 
-
-        if (newRtsp === null) {
-            return;
-        }
+        if (newRtsp === null) return;
 
 
         const newStatus =
@@ -942,10 +1205,7 @@ async function editCamera(
                 camera.status || "offline"
             );
 
-
-        if (newStatus === null) {
-            return;
-        }
+        if (newStatus === null) return;
 
 
         const newDeviceIndex =
@@ -954,10 +1214,7 @@ async function editCamera(
                 camera.device_index ?? 0
             );
 
-
-        if (newDeviceIndex === null) {
-            return;
-        }
+        if (newDeviceIndex === null) return;
 
 
         let deviceIndex = null;
@@ -976,8 +1233,7 @@ async function editCamera(
             if (
                 !Number.isInteger(
                     deviceIndex
-                )
-                ||
+                ) ||
                 deviceIndex < 0
             ) {
 
@@ -1001,9 +1257,7 @@ async function editCamera(
                 newIP.trim(),
 
             camera_type:
-                newType
-                    .trim()
-                    .toUpperCase(),
+                newType.trim().toUpperCase(),
 
             location:
                 newLocation.trim(),
@@ -1015,9 +1269,7 @@ async function editCamera(
                 newRtsp.trim(),
 
             status:
-                newStatus
-                    .trim()
-                    .toLowerCase(),
+                newStatus.trim().toLowerCase(),
 
             device_index:
                 deviceIndex
@@ -1033,10 +1285,8 @@ async function editCamera(
                     method: "PUT",
 
                     headers: {
-
                         "Content-Type":
                             "application/json"
-
                     },
 
                     body:
@@ -1061,7 +1311,7 @@ async function editCamera(
 
 
         alert(
-            "Camera updated successfully!"
+            "Camera updated successfully."
         );
 
     }
@@ -1088,9 +1338,7 @@ async function editCamera(
 // DELETE CAMERA
 // ============================================================
 
-async function deleteCamera(
-    cameraId
-) {
+async function deleteCamera(cameraId) {
 
     const confirmed =
         confirm(
@@ -1098,9 +1346,7 @@ async function deleteCamera(
         );
 
 
-    if (!confirmed) {
-        return;
-    }
+    if (!confirmed) return;
 
 
     try {
@@ -1123,14 +1369,21 @@ async function deleteCamera(
         }
 
 
+        recordingCameras.delete(
+            Number(cameraId)
+        );
+
+
         stopLiveCamera();
 
 
         await loadCameras();
 
+        await loadRecordings();
+
 
         alert(
-            "Camera deleted successfully!"
+            "Camera deleted successfully."
         );
 
     }
@@ -1168,10 +1421,6 @@ function getInputValue(
 
 
     if (!element) {
-
-        console.warn(
-            `Element not found: ${elementId}`
-        );
 
         return "";
 

@@ -77,6 +77,7 @@
 
 
 
+
         <!-- =================================================
              ADD CAMERA
         ================================================== -->
@@ -98,6 +99,7 @@
                     id="name"
                     placeholder="Camera Name"
                     required
+                    autocomplete="off"
                 >
 
 
@@ -107,7 +109,7 @@
                     type="text"
                     id="ip_address"
                     placeholder="IP Address"
-                    required
+                    autocomplete="off"
                 >
 
 
@@ -147,6 +149,7 @@
                     type="text"
                     id="location"
                     placeholder="Location"
+                    autocomplete="off"
                 >
 
 
@@ -156,6 +159,17 @@
                     type="text"
                     id="username"
                     placeholder="Username"
+                    autocomplete="username"
+                >
+
+
+                <!-- Password -->
+
+                <input
+                    type="password"
+                    id="password"
+                    placeholder="Password"
+                    autocomplete="current-password"
                 >
 
 
@@ -165,6 +179,7 @@
                     type="text"
                     id="rtsp_url"
                     placeholder="RTSP URL"
+                    autocomplete="off"
                 >
 
 
@@ -205,17 +220,16 @@
         <section class="card">
 
             <h2>
-                Camera List
+                Camera Monitoring
             </h2>
 
-
             <div
-                id="cameraList"
                 class="camera-grid"
+                id="cameraList"
             >
-
-                Loading cameras...
-
+                <p>
+                    Loading cameras...
+                </p>
             </div>
 
         </section>
@@ -232,10 +246,55 @@
                 Recording History
             </h2>
 
+            <div class="recording-filters">
+
+                <input
+                    type="text"
+                    id="recordingSearch"
+                    placeholder="Search filename..."
+                >
+
+                <input
+                    type="number"
+                    id="recordingCameraFilter"
+                    placeholder="Camera ID"
+                    min="1"
+                >
+
+                <select id="recordingStatusFilter">
+
+                    <option value="">
+                        All Status
+                    </option>
+
+                    <option value="completed">
+                        Completed
+                    </option>
+
+                    <option value="recording">
+                        Recording
+                    </option>
+
+                    <option value="failed">
+                        Failed
+                    </option>
+
+                </select>
+
+                <button
+                    type="button"
+                    id="clearRecordingFilters"
+                >
+                    Clear Filters
+                </button>
+
+            </div>
 
             <div id="recordingList">
 
-                Loading recordings...
+                <p>
+                    Loading recordings...
+                </p>
 
             </div>
 
@@ -243,7 +302,6 @@
 
 
     </main>
-
 
 
     <!-- =====================================================

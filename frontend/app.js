@@ -95,6 +95,11 @@ async function loadCameras() {
 
         });
 
+        // Keep four dashboard positions visible while testing.
+        // Empty positions are visual placeholders only and are NOT
+        // added to the database as fake cameras.
+        addEmptyCameraSlots(cameras.length, 4, cameraList);
+
     }
 
 
@@ -118,6 +123,60 @@ async function loadCameras() {
 
         `;
 
+    }
+
+}
+
+
+// ============================================================
+// EMPTY CAMERA GRID SLOTS
+// ============================================================
+
+function addEmptyCameraSlots(cameraCount, totalSlots, cameraList) {
+
+    if (!cameraList || cameraCount >= totalSlots) {
+        return;
+    }
+
+    for (
+        let slot = cameraCount + 1;
+        slot <= totalSlots;
+        slot++
+    ) {
+
+        const emptyCard =
+            document.createElement("div");
+
+        emptyCard.className =
+            "camera-card empty-camera-card";
+
+        emptyCard.innerHTML = `
+
+            <div class="camera-card-header">
+                <h3>Camera Slot ${slot}</h3>
+                <span class="status-badge offline">EMPTY</span>
+            </div>
+
+            <div class="camera-card-body">
+                <p>
+                    <strong>Status:</strong>
+                    No camera assigned
+                </p>
+                <p>
+                    Connect an additional USB or IP camera
+                    later and add it from the form above.
+                </p>
+            </div>
+
+            <div class="camera-card-actions">
+                <button type="button" disabled>
+                    No Camera
+                </button>
+            </div>
+
+        `;
+
+        cameraList.appendChild(emptyCard);
     }
 
 }
@@ -214,6 +273,39 @@ function createCameraCard(
         </div>
 
 
+        <div class="camera-live-preview">
+
+            ${
+                hasVideoSource
+                    ? `
+                        <img
+                            class="camera-live-image"
+                            id="camera-live-${camera.id}"
+                            alt="${escapeHtml(camera.name || "Camera")}"
+                            style="display:none;"
+                        >
+
+                        <div
+                            class="camera-no-signal"
+                            id="camera-no-signal-${camera.id}"
+                        >
+                            <div class="no-signal-icon">⚫</div>
+                            <strong>LIVE PREVIEW</strong>
+                            <span>Click "Live Tile" to start</span>
+                        </div>
+                      `
+                    : `
+                        <div class="camera-no-signal">
+                            <div class="no-signal-icon">⚫</div>
+                            <strong>NO SIGNAL</strong>
+                            <span>No video source</span>
+                        </div>
+                      `
+            }
+
+        </div>
+
+
         <div class="camera-card-body">
 
             <p>
@@ -284,6 +376,20 @@ function createCameraCard(
                             class="live-button"
                         >
                             View Live
+                        </button>
+
+                        <button
+                            type="button"
+                            class="grid-live-button"
+                        >
+                            ▶ Live Tile
+                        </button>
+
+                        <button
+                            type="button"
+                            class="test-camera-button"
+                        >
+                            Test Camera
                         </button>
                       `
                     : `
@@ -364,6 +470,76 @@ function createCameraCard(
                 viewLiveCamera(
                     camera.id,
                     camera.name
+                );
+
+            }
+        );
+
+    }
+
+
+    // ========================================================
+    // LIVE TILE
+    // ========================================================
+
+    const gridLiveButton =
+        cameraDiv.querySelector(
+            ".grid-live-button"
+        );
+
+
+    if (gridLiveButton) {
+
+        gridLiveButton.dataset.tileActive = "false";
+
+        gridLiveButton.addEventListener(
+            "click",
+            () => {
+
+                if (
+                    gridLiveButton.dataset.tileActive === "true"
+                ) {
+
+                    stopCameraTile(
+                        camera.id,
+                        gridLiveButton
+                    );
+
+                }
+                else {
+
+                    startCameraTile(
+                        camera.id,
+                        gridLiveButton
+                    );
+
+                }
+
+            }
+        );
+
+    }
+
+
+    // ========================================================
+    // TEST CAMERA
+    // ========================================================
+
+    const testButton =
+        cameraDiv.querySelector(
+            ".test-camera-button"
+        );
+
+
+    if (testButton) {
+
+        testButton.addEventListener(
+            "click",
+            () => {
+
+                testCamera(
+                    camera.id,
+                    testButton
                 );
 
             }
@@ -471,6 +647,247 @@ function createCameraCard(
     cameraList.appendChild(
         cameraDiv
     );
+
+}
+
+
+// ============================================================
+// TEST CAMERA
+// ============================================================
+
+async function testCamera(cameraId, buttonElement) {
+
+    if (buttonElement) {
+        buttonElement.disabled = true;
+        buttonElement.textContent = "Testing...";
+    }
+
+    try {
+
+        console.log(
+            "Testing camera:",
+            cameraId
+        );
+
+
+        const response =
+            await fetch(
+                `/cameras/${cameraId}/test`,
+                {
+                    method: "POST",
+                    cache: "no-store"
+                }
+            );
+
+
+        const responseText =
+            await response.text();
+
+
+        let result = {};
+
+        try {
+            result = responseText
+                ? JSON.parse(responseText)
+                : {};
+        }
+        catch {
+            result = {
+                detail: responseText
+            };
+        }
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                result.detail ||
+                result.message ||
+                `Server returned ${response.status}`
+            );
+
+        }
+
+
+        console.log(
+            "Camera test result:",
+            result
+        );
+
+
+        if (result.success) {
+
+            let message =
+                "Camera is working.\n\n" +
+                `Status: ${result.status || "online"}`;
+
+            if (result.resolution) {
+                message +=
+                    `\nResolution: ${result.resolution}`;
+            }
+
+            if (result.camera_type) {
+                message +=
+                    `\nType: ${result.camera_type}`;
+            }
+
+            alert(message);
+
+        }
+        else {
+
+            alert(
+                result.message ||
+                "Camera test failed."
+            );
+
+        }
+
+
+        // The backend updates the camera status.
+        await loadCameras();
+
+    }
+    catch (error) {
+
+        console.error(
+            "Camera test error:",
+            error
+        );
+
+
+        alert(
+            "Camera test failed.\n\n" +
+            error.message
+        );
+
+        // Refresh so the displayed status remains
+        // synchronized with the database.
+        await loadCameras();
+
+    }
+    finally {
+
+        if (buttonElement) {
+            buttonElement.disabled = false;
+            buttonElement.textContent = "Test Camera";
+        }
+
+    }
+
+}
+
+
+// ============================================================
+// START CAMERA TILE
+// ============================================================
+
+function startCameraTile(
+    cameraId,
+    buttonElement
+) {
+
+    // Stop the large live preview first.
+    // This helps avoid opening two capture sessions
+    // on the same USB webcam.
+    stopLiveCamera();
+
+
+    const image =
+        document.getElementById(
+            `camera-live-${cameraId}`
+        );
+
+    const noSignal =
+        document.getElementById(
+            `camera-no-signal-${cameraId}`
+        );
+
+
+    if (!image) {
+
+        alert(
+            "Camera preview element not found."
+        );
+
+        return;
+
+    }
+
+
+    image.src =
+        `/video-feed/${cameraId}?tile=${Date.now()}`;
+
+    image.style.display =
+        "block";
+
+
+    if (noSignal) {
+
+        noSignal.style.display =
+            "none";
+
+    }
+
+
+    if (buttonElement) {
+
+        buttonElement.textContent =
+            "■ Stop Tile";
+
+        buttonElement.dataset.tileActive = "true";
+
+    }
+
+}
+
+
+// ============================================================
+// STOP CAMERA TILE
+// ============================================================
+
+function stopCameraTile(
+    cameraId,
+    buttonElement
+) {
+
+    const image =
+        document.getElementById(
+            `camera-live-${cameraId}`
+        );
+
+    const noSignal =
+        document.getElementById(
+            `camera-no-signal-${cameraId}`
+        );
+
+
+    if (image) {
+
+        image.src = "";
+
+        image.style.display =
+            "none";
+
+    }
+
+
+    if (noSignal) {
+
+        noSignal.style.display =
+            "flex";
+
+    }
+
+
+    if (buttonElement) {
+
+        buttonElement.textContent =
+            "▶ Live Tile";
+
+        buttonElement.dataset.tileActive = "false";
+
+    }
 
 }
 
@@ -773,24 +1190,25 @@ async function loadRecordings() {
 
                     <div class="recording-actions">
 
-                        <a
-    href="/recordings/${recording.id}/video"
-    target="_blank"
->
-    <button type="button">
+    <button
+        type="button"
+        class="play-recording-button"
+        data-recording-id="${recording.id}"
+        data-recording-name="${escapeHtml(
+            recording.filename
+        )}"
+    >
         ▶ Play
     </button>
-</a>
 
-<a
-    href="/recordings/${recording.id}/download"
->
-    <button type="button">
+    <a
+        href="/recordings/${recording.id}/download"
+        class="download-recording-button"
+    >
         ⬇ Download
-    </button>
-</a>
+    </a>
 
-                    </div>
+</div>
 
                 `;
 
@@ -798,6 +1216,27 @@ async function loadRecordings() {
                 recordingList.appendChild(
                     item
                 );
+                const playButton =
+    item.querySelector(
+        ".play-recording-button"
+    );
+
+
+if (playButton) {
+
+    playButton.addEventListener(
+        "click",
+        () => {
+
+            playRecording(
+                recording.id,
+                recording.filename
+            );
+
+        }
+    );
+
+}
 
             }
         );
@@ -822,6 +1261,38 @@ async function loadRecordings() {
 
 
 // ============================================================
+// PLAY RECORDING IN NEW WINDOW
+// ============================================================
+
+function playRecording(
+    recordingId,
+    filename
+) {
+
+    // Open the recording directly in a new browser tab/window.
+    // The frontend page will stay unchanged.
+    const videoUrl =
+        `/recordings/${recordingId}/video`;
+
+    const newWindow =
+        window.open(
+            videoUrl,
+            "_blank",
+            "noopener,noreferrer"
+        );
+
+    if (!newWindow) {
+
+        alert(
+            "The recording window was blocked by your browser. Please allow pop-ups for this site."
+        );
+
+    }
+
+}
+
+
+// ============================================================
 // VIEW LIVE CAMERA
 // ============================================================
 
@@ -829,6 +1300,10 @@ function viewLiveCamera(
     cameraId,
     cameraName
 ) {
+
+    // Stop any card-level tile preview first.
+    stopAllCameraTiles();
+
 
     const liveVideo =
         document.getElementById(
@@ -898,10 +1373,66 @@ function viewLiveCamera(
 
 
 // ============================================================
+// STOP ALL CAMERA TILES
+// ============================================================
+
+function stopAllCameraTiles() {
+
+    const tileImages =
+        document.querySelectorAll(
+            ".camera-live-image"
+        );
+
+    tileImages.forEach(image => {
+
+        image.src = "";
+
+        image.style.display =
+            "none";
+
+    });
+
+
+    const noSignalElements =
+        document.querySelectorAll(
+            ".camera-no-signal"
+        );
+
+    noSignalElements.forEach(element => {
+
+        element.style.display =
+            "flex";
+
+    });
+
+
+    const tileButtons =
+        document.querySelectorAll(
+            ".grid-live-button"
+        );
+
+    tileButtons.forEach(button => {
+
+        button.textContent =
+            "▶ Live Tile";
+
+        button.dataset.tileActive =
+            "false";
+
+    });
+
+}
+
+
+// ============================================================
 // STOP LIVE CAMERA
 // ============================================================
 
 function stopLiveCamera() {
+
+    // Stop any card-level tile preview.
+    stopAllCameraTiles();
+
 
     const liveVideo =
         document.getElementById(
@@ -1029,6 +1560,11 @@ function setupCameraForm() {
                         "username"
                     ),
 
+                password:
+                    getInputValue(
+                        "password"
+                    ),
+
                 rtsp_url:
                     getInputValue(
                         "rtsp_url"
@@ -1107,7 +1643,8 @@ function setupCameraForm() {
 
 
                 alert(
-                    "Failed to add camera."
+                    "Failed to add camera.\n\n" +
+                    error.message
                 );
 
             }
@@ -1190,6 +1727,15 @@ async function editCamera(cameraId) {
         if (newUsername === null) return;
 
 
+        const newPassword =
+            prompt(
+                "Password:",
+                camera.password || ""
+            );
+
+        if (newPassword === null) return;
+
+
         const newRtsp =
             prompt(
                 "RTSP URL:",
@@ -1265,6 +1811,9 @@ async function editCamera(cameraId) {
             username:
                 newUsername.trim(),
 
+            password:
+                newPassword,
+
             rtsp_url:
                 newRtsp.trim(),
 
@@ -1326,7 +1875,8 @@ async function editCamera(cameraId) {
 
 
         alert(
-            "Failed to update camera."
+            "Failed to update camera.\n\n" +
+            error.message
         );
 
     }
@@ -1398,7 +1948,8 @@ async function deleteCamera(cameraId) {
 
 
         alert(
-            "Failed to delete camera."
+            "Failed to delete camera.\n\n" +
+            error.message
         );
 
     }

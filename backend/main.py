@@ -1,6 +1,8 @@
 from datetime import datetime
 from pathlib import Path
 
+import cv2
+
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import (
     FileResponse,
@@ -82,6 +84,8 @@ class Camera(BaseModel):
 
     username: str | None = None
 
+    password: str | None = None
+
     device_index: int | None = None
 
 
@@ -158,6 +162,156 @@ def video_feed(
         )
 
     finally:
+
+        db.close()
+
+
+
+# ============================================================
+# TEST CAMERA
+# ============================================================
+
+@app.post("/cameras/{camera_id}/test")
+def test_camera(
+    camera_id: int
+):
+    """
+    Test whether the configured camera source can be opened
+    and a video frame can be read.
+
+    USB cameras use DirectShow on Windows.
+    IP cameras use the configured RTSP URL.
+    """
+
+    db: Session = SessionLocal()
+
+    capture = None
+
+    try:
+
+        camera = (
+            db.query(CameraModel)
+            .filter(
+                CameraModel.id == camera_id
+            )
+            .first()
+        )
+
+        if camera is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Camera not found"
+            )
+
+        camera_type = (
+            str(camera.camera_type or "IP")
+            .strip()
+            .upper()
+        )
+
+        # --------------------------------------------------------
+        # SELECT VIDEO SOURCE
+        # --------------------------------------------------------
+
+        if camera_type == "USB":
+
+            if camera.device_index is None:
+                camera.status = "offline"
+                db.commit()
+
+                raise HTTPException(
+                    status_code=400,
+                    detail="USB camera does not have a device index."
+                )
+
+            capture = cv2.VideoCapture(
+                camera.device_index,
+                cv2.CAP_DSHOW
+            )
+
+        elif camera_type == "IP":
+
+            if not camera.rtsp_url:
+                camera.status = "offline"
+                db.commit()
+
+                raise HTTPException(
+                    status_code=400,
+                    detail="IP camera does not have an RTSP URL."
+                )
+
+            capture = cv2.VideoCapture(
+                camera.rtsp_url
+            )
+
+        else:
+
+            camera.status = "offline"
+            db.commit()
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Camera type '{camera_type}' "
+                    "is not supported for testing."
+                )
+            )
+
+        # --------------------------------------------------------
+        # OPEN CAMERA
+        # --------------------------------------------------------
+
+        if capture is None or not capture.isOpened():
+
+            camera.status = "offline"
+            db.commit()
+
+            return {
+                "success": False,
+                "camera_id": camera.id,
+                "status": "offline",
+                "message": "Camera could not be opened."
+            }
+
+        # --------------------------------------------------------
+        # READ ONE FRAME
+        # --------------------------------------------------------
+
+        success, frame = capture.read()
+
+        if not success or frame is None:
+
+            camera.status = "offline"
+            db.commit()
+
+            return {
+                "success": False,
+                "camera_id": camera.id,
+                "status": "offline",
+                "message": "Camera opened, but no video frame was received."
+            }
+
+        # --------------------------------------------------------
+        # CAMERA IS WORKING
+        # --------------------------------------------------------
+
+        camera.status = "online"
+        db.commit()
+
+        height, width = frame.shape[:2]
+
+        return {
+            "success": True,
+            "camera_id": camera.id,
+            "status": "online",
+            "message": "Camera is working.",
+            "resolution": f"{width}x{height}"
+        }
+
+    finally:
+
+        if capture is not None:
+            capture.release()
 
         db.close()
 
@@ -346,6 +500,10 @@ def update_camera(
 
         existing_camera.username = (
             camera.username
+        )
+
+        existing_camera.password = (
+            camera.password
         )
 
         existing_camera.device_index = (

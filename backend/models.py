@@ -99,6 +99,17 @@ class CameraModel(Base):
 
 
     # --------------------------------------------------------
+    # PASSWORD
+    # Used for IP/RTSP camera authentication
+    # --------------------------------------------------------
+
+    password: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
+
+    # --------------------------------------------------------
     # DEVICE INDEX
     # Used for USB/webcam cameras
     # --------------------------------------------------------

@@ -1,3 +1,7 @@
+/* =========================================================
+   GLOBAL
+========================================================= */
+
 * {
     box-sizing: border-box;
     margin: 0;
@@ -6,11 +10,19 @@
 }
 
 
+/* =========================================================
+   BODY
+========================================================= */
+
 body {
     background: #f4f6f8;
     color: #222;
 }
 
+
+/* =========================================================
+   HEADER
+========================================================= */
 
 header {
     background: #1f2937;
@@ -18,18 +30,25 @@ header {
     padding: 25px;
 }
 
-
 header h1 {
     margin-bottom: 5px;
 }
 
 
+/* =========================================================
+   MAIN CONTENT
+========================================================= */
+
 main {
-    max-width: 1000px;
+    max-width: 1400px;
     margin: 30px auto;
     padding: 0 20px;
 }
 
+
+/* =========================================================
+   CARDS
+========================================================= */
 
 .card {
     background: white;
@@ -39,18 +58,20 @@ main {
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 
-
 .card h2 {
     margin-bottom: 20px;
 }
 
+
+/* =========================================================
+   FORM
+========================================================= */
 
 form {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
 }
-
 
 input,
 select {
@@ -61,6 +82,10 @@ select {
     min-width: 180px;
 }
 
+
+/* =========================================================
+   BUTTONS
+========================================================= */
 
 button {
     padding: 8px 14px;
@@ -75,33 +100,131 @@ button {
 button:hover {
     opacity: 0.85;
 }
+
+
+/* =========================================================
+   CAMERA GRID
+========================================================= */
+
+.camera-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
 }
 
 
-.camera {
+/* =========================================================
+   CAMERA CARD
+========================================================= */
+
+.camera-card {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.camera-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px;
+    padding: 15px 18px;
+    background: #f8fafc;
     border-bottom: 1px solid #ddd;
 }
-.camera:last-child {
-    border-bottom: none;
+
+.camera-card-header h3 {
+    margin: 0;
 }
 
+.camera-card-body {
+    padding: 18px;
+}
+
+.camera-card-body p {
+    margin: 7px 0;
+}
+
+.camera-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 15px 18px;
+    border-top: 1px solid #ddd;
+}
+
+
+/* =========================================================
+   CAMERA STATUS
+========================================================= */
+
+.status-badge {
+    padding: 5px 10px;
+    border-radius: 15px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.status-badge.online {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.status-badge.offline {
+    background: #fee2e2;
+    color: #991b1b;
+}
 
 .online {
     color: green;
     font-weight: bold;
 }
 
-
 .offline {
     color: red;
     font-weight: bold;
 }
+
+
 /* =========================================================
-   RECORDING
+   CAMERA BUTTONS
+========================================================= */
+
+.live-button {
+    background: #2563eb;
+    color: white;
+}
+
+.record-button {
+    background: #dc2626;
+    color: white;
+}
+
+.stop-record-button {
+    background: #111827;
+    color: white;
+}
+
+.edit-button {
+    background: #f59e0b;
+    color: white;
+}
+
+.delete-button {
+    background: #b91c1c;
+    color: white;
+}
+
+.camera-card-actions button:disabled {
+    background: #9ca3af;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   RECORDING STATUS
 ========================================================= */
 
 .recording-active {
@@ -109,29 +232,44 @@ button:hover {
     font-weight: bold;
 }
 
+.recording-status {
+    font-weight: bold;
+}
 
-.record-button {
-    background: #dc2626;
+.recording-status.recording {
+    color: red;
 }
 
 
-.stop-record-button {
-    background: #111827;
+/* =========================================================
+   RECORDING FILTERS
+========================================================= */
+
+.recording-filters {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+}
+
+.recording-filters input,
+.recording-filters select,
+.recording-filters button {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+.recording-filters input {
+    min-width: 180px;
+}
+
+.recording-filters button {
+    cursor: pointer;
 }
 
 
-.recording-item {
-    padding: 15px;
-    margin-bottom: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background: #f8fafc;
-}
-
-
-.recording-item p {
-    margin: 5px 0;
-}/* =========================================================
+/* =========================================================
    RECORDING HISTORY
 ========================================================= */
 
@@ -147,43 +285,126 @@ button:hover {
     background: #f8fafc;
 }
 
-
 .recording-item p {
     margin: 5px 0;
 }
 
 
+/* =========================================================
+   RECORDING ACTIONS
+========================================================= */
+
 .recording-actions {
     display: flex;
     gap: 8px;
+    align-items: center;
     flex-wrap: wrap;
 }
 
+.recording-actions button {
+    margin-left: 0;
+}
 
 .recording-actions a {
     text-decoration: none;
 }
+
+.play-recording-button {
+    background: #2563eb;
+    color: white;
+    cursor: pointer;
+}
+
+
 /* =========================================================
-   RECORDING BUTTONS
+   LIVE VIDEO
 ========================================================= */
 
-.record-button {
-    background: #dc2626;
-    color: white;
-}
-
-.stop-record-button {
-    background: #111827;
-    color: white;
-}
-
-.recording-status {
-    font-weight: bold;
-}
-
-.recording-actions {
+.video-container {
+    width: 100%;
+    min-height: 400px;
+    background: #111;
+    border-radius: 8px;
+    overflow: hidden;
     display: flex;
-    gap: 10px;
-    flex-wrap: wrap;
-    margin-top: 10px;
+    justify-content: center;
+    align-items: center;
+}
+
+#liveVideo {
+    width: 100%;
+    max-height: 650px;
+    object-fit: contain;
+    background: black;
+}
+
+#videoMessage {
+    color: white;
+    text-align: center;
+    padding: 30px;
+}
+
+
+/* =========================================================
+   EMPTY CAMERA SLOT
+========================================================= */
+
+.empty-camera-card {
+    min-height: 220px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    opacity: 0.7;
+}
+
+
+/* =========================================================
+   RESPONSIVE DESIGN
+========================================================= */
+
+@media (max-width: 900px) {
+
+    main {
+        padding: 0 15px;
+    }
+
+    .camera-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .recording-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .recording-actions {
+        width: 100%;
+    }
+}
+
+
+@media (max-width: 600px) {
+
+    header {
+        padding: 18px;
+    }
+
+    .card {
+        padding: 18px;
+    }
+
+    input,
+    select {
+        min-width: 100%;
+    }
+
+    .camera-card-actions {
+        flex-direction: column;
+    }
+
+    .camera-card-actions button {
+        width: 100%;
+        margin-left: 0;
+    }
 }

@@ -10,6 +10,9 @@
 
 const recordingCameras = new Set();
 
+// 4 x 4 CCTV monitoring wall = 16 camera positions.
+const DASHBOARD_CAMERA_SLOTS = 16;
+
 
 // ============================================================
 // PAGE READY
@@ -95,10 +98,14 @@ async function loadCameras() {
 
         });
 
-        // Keep four dashboard positions visible while testing.
+        // Keep a 4x4 dashboard visible while testing.
         // Empty positions are visual placeholders only and are NOT
         // added to the database as fake cameras.
-        addEmptyCameraSlots(cameras.length, 4, cameraList);
+        addEmptyCameraSlots(
+            cameras.length,
+            DASHBOARD_CAMERA_SLOTS,
+            cameraList
+        );
 
     }
 
@@ -1560,11 +1567,6 @@ function setupCameraForm() {
                         "username"
                     ),
 
-                password:
-                    getInputValue(
-                        "password"
-                    ),
-
                 rtsp_url:
                     getInputValue(
                         "rtsp_url"
@@ -1727,15 +1729,6 @@ async function editCamera(cameraId) {
         if (newUsername === null) return;
 
 
-        const newPassword =
-            prompt(
-                "Password:",
-                camera.password || ""
-            );
-
-        if (newPassword === null) return;
-
-
         const newRtsp =
             prompt(
                 "RTSP URL:",
@@ -1810,9 +1803,6 @@ async function editCamera(cameraId) {
 
             username:
                 newUsername.trim(),
-
-            password:
-                newPassword,
 
             rtsp_url:
                 newRtsp.trim(),

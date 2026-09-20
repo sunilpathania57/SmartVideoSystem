@@ -1,5 +1,6 @@
 /* =========================================================
-   GLOBAL
+   SMART VIDEO MANAGEMENT SYSTEM
+   MAIN STYLESHEET - 4 x 4 CAMERA WALL
 ========================================================= */
 
 * {
@@ -9,20 +10,10 @@
     font-family: Arial, sans-serif;
 }
 
-
-/* =========================================================
-   BODY
-========================================================= */
-
 body {
     background: #f4f6f8;
     color: #222;
 }
-
-
-/* =========================================================
-   HEADER
-========================================================= */
 
 header {
     background: #1f2937;
@@ -34,21 +25,11 @@ header h1 {
     margin-bottom: 5px;
 }
 
-
-/* =========================================================
-   MAIN CONTENT
-========================================================= */
-
 main {
-    max-width: 1400px;
+    max-width: 1600px;
     margin: 30px auto;
     padding: 0 20px;
 }
-
-
-/* =========================================================
-   CARDS
-========================================================= */
 
 .card {
     background: white;
@@ -61,11 +42,6 @@ main {
 .card h2 {
     margin-bottom: 20px;
 }
-
-
-/* =========================================================
-   FORM
-========================================================= */
 
 form {
     display: flex;
@@ -82,11 +58,6 @@ select {
     min-width: 180px;
 }
 
-
-/* =========================================================
-   BUTTONS
-========================================================= */
-
 button {
     padding: 8px 14px;
     margin-left: 5px;
@@ -101,21 +72,15 @@ button:hover {
     opacity: 0.85;
 }
 
-
 /* =========================================================
-   CAMERA GRID
+   4 x 4 CAMERA GRID
 ========================================================= */
 
 .camera-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 15px;
 }
-
-
-/* =========================================================
-   CAMERA CARD
-========================================================= */
 
 .camera-card {
     background: white;
@@ -123,48 +88,105 @@ button:hover {
     border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    min-width: 0;
 }
 
 .camera-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 15px 18px;
+    gap: 10px;
+    padding: 12px 14px;
     background: #f8fafc;
     border-bottom: 1px solid #ddd;
 }
 
 .camera-card-header h3 {
     margin: 0;
+    font-size: 16px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.camera-live-preview {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    background: #111;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.camera-live-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: black;
+}
+
+.camera-no-signal {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    color: #9ca3af;
+    background: #111827;
+    text-align: center;
+}
+
+.no-signal-icon {
+    font-size: 24px;
+}
+
+.camera-no-signal strong {
+    font-size: 15px;
+    color: #ef4444;
+}
+
+.camera-no-signal span {
+    font-size: 12px;
 }
 
 .camera-card-body {
-    padding: 18px;
+    padding: 14px;
 }
 
 .camera-card-body p {
-    margin: 7px 0;
+    margin: 6px 0;
+    font-size: 14px;
+    overflow-wrap: anywhere;
 }
 
 .camera-card-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
-    padding: 15px 18px;
+    gap: 6px;
+    padding: 12px 14px;
     border-top: 1px solid #ddd;
 }
 
+.camera-card-actions button {
+    margin-left: 0;
+    font-size: 13px;
+    padding: 7px 10px;
+}
 
 /* =========================================================
-   CAMERA STATUS
+   STATUS
 ========================================================= */
 
 .status-badge {
-    padding: 5px 10px;
+    padding: 4px 8px;
     border-radius: 15px;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: bold;
     text-transform: uppercase;
+    white-space: nowrap;
 }
 
 .status-badge.online {
@@ -187,13 +209,22 @@ button:hover {
     font-weight: bold;
 }
 
-
 /* =========================================================
    CAMERA BUTTONS
 ========================================================= */
 
 .live-button {
     background: #2563eb;
+    color: white;
+}
+
+.grid-live-button {
+    background: #0891b2;
+    color: white;
+}
+
+.test-camera-button {
+    background: #16a34a;
     color: white;
 }
 
@@ -222,9 +253,23 @@ button:hover {
     cursor: not-allowed;
 }
 
+/* =========================================================
+   EMPTY CAMERA SLOT
+========================================================= */
+
+.empty-camera-card {
+    min-height: 0;
+}
+
+.empty-camera-card .camera-card-body {
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
 
 /* =========================================================
-   RECORDING STATUS
+   RECORDING
 ========================================================= */
 
 .recording-active {
@@ -239,11 +284,6 @@ button:hover {
 .recording-status.recording {
     color: red;
 }
-
-
-/* =========================================================
-   RECORDING FILTERS
-========================================================= */
 
 .recording-filters {
     display: flex;
@@ -264,15 +304,6 @@ button:hover {
     min-width: 180px;
 }
 
-.recording-filters button {
-    cursor: pointer;
-}
-
-
-/* =========================================================
-   RECORDING HISTORY
-========================================================= */
-
 .recording-item {
     display: flex;
     justify-content: space-between;
@@ -288,11 +319,6 @@ button:hover {
 .recording-item p {
     margin: 5px 0;
 }
-
-
-/* =========================================================
-   RECORDING ACTIONS
-========================================================= */
 
 .recording-actions {
     display: flex;
@@ -315,9 +341,18 @@ button:hover {
     cursor: pointer;
 }
 
+.download-recording-button {
+    display: inline-block;
+    padding: 8px 14px;
+    border-radius: 5px;
+    background: #374151;
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+}
 
 /* =========================================================
-   LIVE VIDEO
+   LARGE LIVE CAMERA VIEW
 ========================================================= */
 
 .video-container {
@@ -344,33 +379,23 @@ button:hover {
     padding: 30px;
 }
 
-
 /* =========================================================
-   EMPTY CAMERA SLOT
+   RESPONSIVE
 ========================================================= */
 
-.empty-camera-card {
-    min-height: 220px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    opacity: 0.7;
+@media (max-width: 1300px) {
+    .camera-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
-
-/* =========================================================
-   RESPONSIVE DESIGN
-========================================================= */
-
-@media (max-width: 900px) {
-
+@media (max-width: 950px) {
     main {
         padding: 0 15px;
     }
 
     .camera-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .recording-item {
@@ -383,9 +408,7 @@ button:hover {
     }
 }
 
-
 @media (max-width: 600px) {
-
     header {
         padding: 18px;
     }
@@ -397,6 +420,10 @@ button:hover {
     input,
     select {
         min-width: 100%;
+    }
+
+    .camera-grid {
+        grid-template-columns: 1fr;
     }
 
     .camera-card-actions {

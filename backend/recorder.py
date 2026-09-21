@@ -3,6 +3,7 @@ from pathlib import Path
 import math
 import subprocess
 import threading
+import time
 
 import cv2
 
@@ -18,6 +19,17 @@ RECORDINGS_DIR = BASE_DIR / "recordings"
 RECORDINGS_DIR.mkdir(
     exist_ok=True
 )
+
+
+# ============================================================
+# RECORDING SETTINGS
+# ============================================================
+
+# Create a new recording file every 5 minutes.
+SEGMENT_DURATION_SECONDS = 5 * 60
+
+# Maximum time to wait for the recording thread to stop.
+THREAD_JOIN_TIMEOUT_SECONDS = 10
 
 
 # ============================================================
@@ -104,8 +116,8 @@ def _open_camera_source(
         Uses DirectShow on Windows.
 
     IP:
-        Uses the RTSP URL. We try FFmpeg first and then
-        OpenCV's default backend as a fallback.
+        Uses the RTSP URL. FFmpeg backend is tried first,
+        followed by OpenCV's default backend.
     """
 
     normalized_type = (
@@ -113,8 +125,12 @@ def _open_camera_source(
     )
 
     if normalized_type == "USB":
+
         if device_index is None:
-            return None, "USB camera does not have a device index."
+            return (
+                None,
+                "USB camera does not have a device index.",
+            )
 
         print(
             f"Opening USB camera device {device_index}..."
@@ -128,12 +144,18 @@ def _open_camera_source(
         return camera, None
 
     if normalized_type == "IP":
+
         if not rtsp_url:
-            return None, "IP camera does not have an RTSP URL."
+            return (
+                None,
+                "IP camera does not have an RTSP URL.",
+            )
 
-        print(f"Opening IP camera RTSP stream: {rtsp_url}")
+        print(
+            f"Opening IP camera RTSP stream: {rtsp_url}"
+        )
 
-        # Prefer FFmpeg for RTSP when available.
+        # Prefer FFmpeg for RTSP.
         try:
             camera = cv2.VideoCapture(
                 rtsp_url,
@@ -144,13 +166,14 @@ def _open_camera_source(
                 return camera, None
 
             camera.release()
+
         except Exception as exc:
             print(
-                "FFmpeg backend could not open RTSP stream: "
-                f"{exc}"
+                "FFmpeg backend could not open RTSP "
+                f"stream: {exc}"
             )
 
-        # Fallback to OpenCV's default backend.
+        # Fallback.
         camera = cv2.VideoCapture(rtsp_url)
 
         return camera, None
@@ -158,8 +181,8 @@ def _open_camera_source(
     return (
         None,
         (
-            f"Unsupported camera type '{normalized_type}'. "
-            "Use USB or IP."
+            f"Unsupported camera type "
+            f"'{normalized_type}'. Use USB or IP."
         ),
     )
 
@@ -168,22 +191,35 @@ def _open_camera_source(
 # GET VIDEO SETTINGS
 # ============================================================
 
-def _get_video_settings(camera, first_frame=None):
+def _get_video_settings(
+    camera,
+    first_frame=None,
+):
     """
     Determine a usable frame size and FPS.
 
-    RTSP cameras sometimes report 0 or invalid FPS values, so
-    a safe default is used when necessary.
+    RTSP cameras may report an invalid FPS, so a safe
+    default is used.
     """
 
     if first_frame is not None:
-        frame_height, frame_width = first_frame.shape[:2]
-    else:
-        frame_width = int(
-            camera.get(cv2.CAP_PROP_FRAME_WIDTH) or 0
+
+        frame_height, frame_width = (
+            first_frame.shape[:2]
         )
+
+    else:
+
+        frame_width = int(
+            camera.get(
+                cv2.CAP_PROP_FRAME_WIDTH
+            ) or 0
+        )
+
         frame_height = int(
-            camera.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0
+            camera.get(
+                cv2.CAP_PROP_FRAME_HEIGHT
+            ) or 0
         )
 
     if frame_width <= 0:
@@ -192,14 +228,20 @@ def _get_video_settings(camera, first_frame=None):
     if frame_height <= 0:
         frame_height = 480
 
-    fps_value = camera.get(cv2.CAP_PROP_FPS)
+    fps_value = camera.get(
+        cv2.CAP_PROP_FPS
+    )
 
     try:
         fps = float(fps_value)
     except (TypeError, ValueError):
         fps = 20.0
 
-    if not math.isfinite(fps) or fps <= 1 or fps > 120:
+    if (
+        not math.isfinite(fps)
+        or fps <= 1
+        or fps > 120
+    ):
         fps = 20.0
 
     return (
@@ -207,6 +249,264 @@ def _get_video_settings(camera, first_frame=None):
         frame_height,
         fps,
     )
+
+
+# ============================================================
+# CREATE SEGMENT WRITER
+# ============================================================
+
+def _create_segment(
+    recording,
+    segment_number: int,
+    start_time: datetime,
+):
+    """
+    Create a new raw MP4 file for one recording segment.
+    """
+
+    camera_id = recording["camera_id"]
+
+    filename = (
+        f"camera_{camera_id}_"
+        f"{recording['session_timestamp']}_"
+        f"part{segment_number:02d}.mp4"
+    )
+
+    output_file = RECORDINGS_DIR / filename
+
+    fourcc = cv2.VideoWriter_fourcc(
+        *"mp4v"
+    )
+
+    writer = cv2.VideoWriter(
+        str(output_file),
+        fourcc,
+        recording["fps"],
+        (
+            recording["width"],
+            recording["height"],
+        ),
+    )
+
+    if not writer.isOpened():
+
+        return (
+            None,
+            None,
+            (
+                "Could not create recording "
+                f"segment file: {filename}"
+            ),
+        )
+
+    segment = {
+        "segment_number": segment_number,
+        "filename": filename,
+        "output_file": output_file,
+        "start_time": start_time,
+        "end_time": None,
+        "duration_seconds": 0,
+        "frame_count": 0,
+    }
+
+    print()
+    print(
+        f"Started segment {segment_number} "
+        f"for camera {camera_id}: {filename}"
+    )
+
+    return (
+        writer,
+        segment,
+        None,
+    )
+
+
+# ============================================================
+# FINALIZE SEGMENT FILE
+# ============================================================
+
+def _finalize_segment_file(segment):
+    """
+    Convert one completed raw segment to browser-compatible H.264.
+
+    The returned segment contains the FINAL filename that should be
+    stored in PostgreSQL.
+    """
+
+    raw_file = Path(segment["output_file"])
+
+    h264_filename = (
+        raw_file.stem
+        + "_web.mp4"
+    )
+
+    h264_file = (
+        RECORDINGS_DIR
+        / h264_filename
+    )
+
+    conversion_success = False
+
+    if (
+        raw_file.exists()
+        and raw_file.stat().st_size > 0
+    ):
+
+        conversion_success = (
+            convert_to_h264(
+                raw_file,
+                h264_file,
+            )
+        )
+
+    else:
+
+        print(
+            "Segment file is missing or empty: "
+            f"{raw_file}"
+        )
+
+    if conversion_success:
+
+        final_filename = h264_filename
+        final_file = h264_file
+        final_format = "H.264"
+
+        try:
+
+            if raw_file.exists():
+                raw_file.unlink()
+
+        except OSError as exc:
+
+            print(
+                "Could not remove raw segment: "
+                f"{exc}"
+            )
+
+    else:
+
+        final_filename = raw_file.name
+        final_file = raw_file
+        final_format = "mp4v"
+
+        print(
+            "Keeping raw segment because H.264 "
+            "conversion failed."
+        )
+
+    finalized = dict(segment)
+
+    finalized["filename"] = final_filename
+    finalized["final_filename"] = final_filename
+    finalized["final_file"] = final_file
+    finalized["format"] = final_format
+
+    return finalized
+
+
+# ============================================================
+# CLOSE CURRENT SEGMENT
+# ============================================================
+
+def _close_current_segment(
+    recording,
+    end_time: datetime | None = None,
+):
+    """
+    Close the current segment, finalize the file, and then
+    notify the application/database callback with the FINAL
+    filename.
+    """
+
+    writer = recording.get(
+        "writer"
+    )
+
+    segment = recording.get(
+        "current_segment"
+    )
+
+    if writer is not None:
+
+        try:
+
+            writer.release()
+
+        except Exception as exc:
+
+            print(
+                "Error releasing segment writer: "
+                f"{exc}"
+            )
+
+    recording["writer"] = None
+
+    if segment is None:
+
+        recording["current_segment"] = None
+        return None
+
+    if segment["end_time"] is None:
+
+        segment["end_time"] = (
+            end_time or datetime.now()
+        )
+
+    segment["duration_seconds"] = max(
+        0,
+        int(
+            (
+                segment["end_time"]
+                - segment["start_time"]
+            ).total_seconds()
+        ),
+    )
+
+    print(
+        f"Closed segment "
+        f"{segment['segment_number']} "
+        f"for camera "
+        f"{recording['camera_id']} "
+        f"({segment['duration_seconds']} sec, "
+        f"{segment['frame_count']} frames)"
+    )
+
+    # Finalize the file BEFORE database callback.
+    finalized_segment = _finalize_segment_file(
+        segment
+    )
+
+    recording["segments"].append(
+        finalized_segment
+    )
+
+    # Save the FINAL filename to PostgreSQL.
+    if finalized_segment["frame_count"] > 0:
+
+        callback = recording.get(
+            "on_segment_ready"
+        )
+
+        if callback is not None:
+
+            try:
+
+                callback(
+                    dict(finalized_segment)
+                )
+
+            except Exception as exc:
+
+                print(
+                    "Segment database callback failed: "
+                    f"{exc}"
+                )
+
+    recording["current_segment"] = None
+
+    return finalized_segment
 
 
 # ============================================================
@@ -218,21 +518,23 @@ def start_recording(
     device_index: int | None = None,
     camera_type: str = "USB",
     rtsp_url: str | None = None,
+    on_segment_ready=None,
 ):
     """
     Start background recording.
 
-    Backwards compatible with the previous call:
-
+    Backwards compatible with:
         start_recording(camera_id, device_index)
 
-    New IP-camera call:
-
+    IP camera:
         start_recording(
             camera_id,
             camera_type="IP",
             rtsp_url="rtsp://..."
         )
+
+    Recordings are automatically split into 5-minute
+    segments.
     """
 
     if camera_id in active_recordings:
@@ -246,19 +548,13 @@ def start_recording(
     )
 
     # --------------------------------------------------------
-    # CREATE FILE NAME
+    # CREATE SESSION TIMESTAMP
     # --------------------------------------------------------
 
-    timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
-    )
-
-    filename = (
-        f"camera_{camera_id}_{timestamp}.mp4"
-    )
-
-    output_file = (
-        RECORDINGS_DIR / filename
+    session_timestamp = (
+        datetime.now().strftime(
+            "%Y%m%d_%H%M%S"
+        )
     )
 
     # --------------------------------------------------------
@@ -274,11 +570,14 @@ def start_recording(
     if camera is None:
         return (
             False,
-            open_error or "Could not create camera object.",
+            open_error
+            or "Could not create camera object.",
         )
 
     if not camera.isOpened():
+
         camera.release()
+
         return (
             False,
             "Could not open camera or RTSP stream.",
@@ -291,10 +590,15 @@ def start_recording(
     success, first_frame = camera.read()
 
     if not success or first_frame is None:
+
         camera.release()
+
         return (
             False,
-            "Camera opened, but no video frame was received.",
+            (
+                "Camera opened, but no video frame "
+                "was received."
+            ),
         )
 
     # --------------------------------------------------------
@@ -312,28 +616,6 @@ def start_recording(
     )
 
     # --------------------------------------------------------
-    # CREATE OPENCV VIDEO WRITER
-    # --------------------------------------------------------
-
-    fourcc = cv2.VideoWriter_fourcc(
-        *"mp4v"
-    )
-
-    writer = cv2.VideoWriter(
-        str(output_file),
-        fourcc,
-        fps,
-        (width, height),
-    )
-
-    if not writer.isOpened():
-        camera.release()
-        return (
-            False,
-            "Could not create recording file.",
-        )
-
-    # --------------------------------------------------------
     # RECORDING INFORMATION
     # --------------------------------------------------------
 
@@ -343,16 +625,47 @@ def start_recording(
         "device_index": device_index,
         "rtsp_url": rtsp_url,
         "camera": camera,
-        "writer": writer,
-        "filename": filename,
-        "output_file": output_file,
+        "writer": None,
+        "current_segment": None,
+        "segments": [],
+        "session_timestamp": session_timestamp,
         "start_time": datetime.now(),
         "running": True,
         "first_frame": first_frame,
         "width": width,
         "height": height,
         "fps": fps,
+        "segment_number": 1,
+        "on_segment_ready": on_segment_ready,
     }
+
+    # --------------------------------------------------------
+    # CREATE FIRST SEGMENT
+    # --------------------------------------------------------
+
+    writer, segment, segment_error = (
+        _create_segment(
+            recording_info,
+            segment_number=1,
+            start_time=recording_info["start_time"],
+        )
+    )
+
+    if writer is None:
+
+        camera.release()
+
+        return (
+            False,
+            segment_error
+            or "Could not create recording segment.",
+        )
+
+    recording_info["writer"] = writer
+
+    recording_info["current_segment"] = (
+        segment
+    )
 
     # --------------------------------------------------------
     # STORE ACTIVE RECORDING
@@ -379,8 +692,8 @@ def start_recording(
     recording_thread.start()
 
     print(
-        f"Recording started for camera {camera_id} "
-        f"({normalized_type})."
+        f"Recording started for camera "
+        f"{camera_id} ({normalized_type})."
     )
 
     return (
@@ -390,12 +703,42 @@ def start_recording(
 
 
 # ============================================================
+# WRITE FRAME OVERLAY
+# ============================================================
+
+def _add_recording_overlay(frame):
+
+    cv2.putText(
+        frame,
+        "SMART VIDEO MANAGEMENT SYSTEM",
+        (20, 35),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (255, 255, 255),
+        2,
+    )
+
+    cv2.putText(
+        frame,
+        "RECORDING",
+        (20, 70),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (0, 0, 255),
+        2,
+    )
+
+    return frame
+
+
+# ============================================================
 # RECORD CAMERA
 # ============================================================
 
 def _record_camera(
     camera_id: int
 ):
+
     recording = (
         active_recordings.get(
             camera_id
@@ -409,21 +752,26 @@ def _record_camera(
         "camera"
     ]
 
-    writer = recording[
-        "writer"
-    ]
-
     first_frame = recording.get(
         "first_frame"
     )
 
     frame_count = 0
 
+    # Monotonic clock is used for reliable segment timing.
+    segment_started_monotonic = (
+        time.monotonic()
+    )
+
     try:
-        # Write the initial frame that was used to validate the
-        # source and determine its dimensions.
+
+        # ----------------------------------------------------
+        # WRITE FIRST FRAME
+        # ----------------------------------------------------
+
         if first_frame is not None:
-            frame = first_frame
+
+            frame = first_frame.copy()
 
             expected_size = (
                 recording["width"],
@@ -434,46 +782,132 @@ def _record_camera(
                 frame.shape[1],
                 frame.shape[0],
             ) != expected_size:
+
                 frame = cv2.resize(
                     frame,
                     expected_size,
                 )
 
-            cv2.putText(
-                frame,
-                "SMART VIDEO MANAGEMENT SYSTEM",
-                (20, 35),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
+            frame = _add_recording_overlay(
+                frame
             )
 
-            cv2.putText(
-                frame,
-                "RECORDING",
-                (20, 70),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2,
+            writer = recording.get(
+                "writer"
             )
 
-            writer.write(frame)
-            frame_count += 1
+            if writer is not None:
+
+                writer.write(frame)
+
+                frame_count += 1
+
+                current_segment = (
+                    recording.get(
+                        "current_segment"
+                    )
+                )
+
+                if current_segment:
+                    current_segment[
+                        "frame_count"
+                    ] += 1
+
+        recording["first_frame"] = None
+
+        # ----------------------------------------------------
+        # RECORD LOOP
+        # ----------------------------------------------------
 
         while recording[
             "running"
         ]:
+
+            # ------------------------------------------------
+            # SEGMENT CHECK
+            # ------------------------------------------------
+
+            elapsed = (
+                time.monotonic()
+                - segment_started_monotonic
+            )
+
+            if (
+                elapsed >=
+                SEGMENT_DURATION_SECONDS
+            ):
+
+                now = datetime.now()
+
+                _close_current_segment(
+                    recording,
+                    end_time=now,
+                )
+
+                if not recording[
+                    "running"
+                ]:
+                    break
+
+                recording[
+                    "segment_number"
+                ] += 1
+
+                writer, segment, segment_error = (
+                    _create_segment(
+                        recording,
+                        segment_number=
+                            recording[
+                                "segment_number"
+                            ],
+                        start_time=now,
+                    )
+                )
+
+                if writer is None:
+
+                    print(
+                        f"Camera {camera_id}: "
+                        f"Could not start next "
+                        f"segment: {segment_error}"
+                    )
+
+                    recording[
+                        "running"
+                    ] = False
+
+                    break
+
+                recording[
+                    "writer"
+                ] = writer
+
+                recording[
+                    "current_segment"
+                ] = segment
+
+                segment_started_monotonic = (
+                    time.monotonic()
+                )
+
+            # ------------------------------------------------
+            # READ FRAME
+            # ------------------------------------------------
+
             success, frame = (
                 camera.read()
             )
 
-            if not success or frame is None:
+            if (
+                not success
+                or frame is None
+            ):
+
                 print(
                     f"Camera {camera_id}: "
                     "Could not read frame."
                 )
+
                 break
 
             expected_size = (
@@ -485,54 +919,71 @@ def _record_camera(
                 frame.shape[1],
                 frame.shape[0],
             ) != expected_size:
+
                 frame = cv2.resize(
                     frame,
                     expected_size,
                 )
 
             # ------------------------------------------------
-            # ADD RECORDING TEXT
+            # ADD OVERLAY
             # ------------------------------------------------
 
-            cv2.putText(
-                frame,
-                "SMART VIDEO MANAGEMENT SYSTEM",
-                (20, 35),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (255, 255, 255),
-                2,
-            )
-
-            cv2.putText(
-                frame,
-                "RECORDING",
-                (20, 70),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.7,
-                (0, 0, 255),
-                2,
+            frame = _add_recording_overlay(
+                frame
             )
 
             # ------------------------------------------------
             # WRITE FRAME
             # ------------------------------------------------
 
+            writer = recording.get(
+                "writer"
+            )
+
+            if writer is None:
+                break
+
             writer.write(frame)
+
             frame_count += 1
 
+            current_segment = (
+                recording.get(
+                    "current_segment"
+                )
+            )
+
+            if current_segment:
+
+                current_segment[
+                    "frame_count"
+                ] += 1
+
     except Exception as exc:
+
         print(
-            f"Camera {camera_id}: recording thread error: "
-            f"{exc}"
+            f"Camera {camera_id}: "
+            f"recording thread error: {exc}"
         )
 
     finally:
+
+        # Close the currently open segment.
+        _close_current_segment(
+            recording,
+            end_time=datetime.now(),
+        )
+
+        recording[
+            "running"
+        ] = False
+
         camera.release()
-        writer.release()
 
         print(
-            f"Camera {camera_id}: recording thread stopped. "
+            f"Camera {camera_id}: "
+            "recording thread stopped. "
             f"Frames written: {frame_count}"
         )
 
@@ -544,6 +995,7 @@ def _record_camera(
 def stop_recording(
     camera_id: int
 ):
+
     recording = (
         active_recordings.get(
             camera_id
@@ -551,6 +1003,7 @@ def stop_recording(
     )
 
     if recording is None:
+
         return (
             False,
             "Camera is not recording.",
@@ -569,12 +1022,58 @@ def stop_recording(
     ]
 
     if thread.is_alive():
+
         thread.join(
-            timeout=10
+            timeout=THREAD_JOIN_TIMEOUT_SECONDS
         )
 
     # --------------------------------------------------------
-    # END TIME
+    # ENSURE CURRENT SEGMENT IS CLOSED
+    # --------------------------------------------------------
+
+    if recording.get(
+        "current_segment"
+    ) is not None:
+
+        _close_current_segment(
+            recording,
+            end_time=datetime.now(),
+        )
+
+    # --------------------------------------------------------
+    # ENSURE CAMERA/WRITER ARE RELEASED
+    # --------------------------------------------------------
+
+    writer = recording.get(
+        "writer"
+    )
+
+    if writer is not None:
+
+        try:
+
+            writer.release()
+
+        except Exception:
+            pass
+
+        recording["writer"] = None
+
+    camera = recording.get(
+        "camera"
+    )
+
+    if camera is not None:
+
+        try:
+
+            camera.release()
+
+        except Exception:
+            pass
+
+    # --------------------------------------------------------
+    # END TIME / TOTAL DURATION
     # --------------------------------------------------------
 
     end_time = datetime.now()
@@ -587,77 +1086,49 @@ def stop_recording(
         0,
         int(
             (
-                end_time - start_time
+                end_time
+                - start_time
             ).total_seconds()
         ),
     )
 
     # --------------------------------------------------------
-    # ORIGINAL FILE
+    # ALL SEGMENTS HAVE ALREADY BEEN FINALIZED
     # --------------------------------------------------------
 
-    original_file = (
-        recording[
-            "output_file"
-        ]
-    )
+    final_segments = []
 
-    # --------------------------------------------------------
-    # H.264 FILE
-    # --------------------------------------------------------
+    for segment in recording.get(
+        "segments",
+        [],
+    ):
 
-    h264_filename = (
-        original_file.stem
-        + "_web.mp4"
-    )
+        final_segments.append(
+            {
+                "segment_number":
+                    segment["segment_number"],
 
-    h264_file = (
-        RECORDINGS_DIR
-        / h264_filename
-    )
+                "filename":
+                    segment["filename"],
 
-    # --------------------------------------------------------
-    # CONVERT TO H.264
-    # --------------------------------------------------------
+                "start_time":
+                    segment["start_time"],
 
-    conversion_success = False
+                "end_time":
+                    segment["end_time"],
 
-    if original_file.exists() and original_file.stat().st_size > 0:
-        conversion_success = (
-            convert_to_h264(
-                original_file,
-                h264_file,
-            )
-        )
-    else:
-        print(
-            "Original recording file is missing or empty."
-        )
+                "duration_seconds":
+                    segment["duration_seconds"],
 
-    # --------------------------------------------------------
-    # SELECT FINAL FILE
-    # --------------------------------------------------------
+                "frame_count":
+                    segment["frame_count"],
 
-    if conversion_success:
-        final_filename = h264_filename
-
-        # Remove original mp4 because browser-ready copy exists.
-        if original_file.exists():
-            try:
-                original_file.unlink()
-            except OSError as exc:
-                print(
-                    f"Could not remove original recording: {exc}"
-                )
-
-    else:
-        print(
-            "Keeping original recording "
-            "because conversion failed."
-        )
-
-        final_filename = (
-            original_file.name
+                "format":
+                    segment.get(
+                        "format",
+                        "mp4v",
+                    ),
+            }
         )
 
     # --------------------------------------------------------
@@ -670,6 +1141,31 @@ def stop_recording(
     )
 
     # --------------------------------------------------------
+    # BACKWARD-COMPATIBLE RESULT
+    # --------------------------------------------------------
+
+    last_segment = (
+        final_segments[-1]
+        if final_segments
+        else None
+    )
+
+    if last_segment:
+
+        final_filename = (
+            last_segment["filename"]
+        )
+
+        final_format = (
+            last_segment["format"]
+        )
+
+    else:
+
+        final_filename = None
+        final_format = "unknown"
+
+    # --------------------------------------------------------
     # RESULT
     # --------------------------------------------------------
 
@@ -677,18 +1173,25 @@ def stop_recording(
         True,
         {
             "camera_id": camera_id,
+
             "filename": final_filename,
+
             "start_time": start_time,
+
             "end_time": end_time,
+
             "duration_seconds": duration,
-            "format": (
-                "H.264"
-                if conversion_success
-                else "mp4v"
-            ),
+
+            "format": final_format,
+
             "camera_type": recording.get(
                 "camera_type",
                 "USB",
             ),
+
+            "segments": final_segments,
+
+            "segment_duration_seconds":
+                SEGMENT_DURATION_SECONDS,
         },
     )

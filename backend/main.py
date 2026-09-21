@@ -106,6 +106,32 @@ def home():
     )
 
 
+@app.get(
+    "/add-camera",
+    include_in_schema=False
+)
+def add_camera_page():
+
+    return FileResponse(
+        str(
+            FRONTEND_DIR / "add-camera.html"
+        )
+    )
+
+
+@app.get(
+    "/recording-history",
+    include_in_schema=False
+)
+def recording_history_page():
+
+    return FileResponse(
+        str(
+            FRONTEND_DIR / "recordings.html"
+        )
+    )
+
+
 # ============================================================
 # LIVE VIDEO
 # ============================================================
@@ -580,6 +606,74 @@ def delete_camera(
 
 
 # ============================================================
+# AUTO-SAVE RECORDING SEGMENT
+# ============================================================
+
+def save_recording_segment(segment: dict):
+    """Save one completed recording segment to PostgreSQL."""
+
+    filename = str(
+        segment.get("filename") or ""
+    ).strip()
+
+    if not filename:
+        return None
+
+    # This callback may run from the recorder background thread,
+    # so always create and close a dedicated SQLAlchemy session.
+    db: Session = SessionLocal()
+
+    try:
+
+        existing = (
+            db.query(RecordingModel)
+            .filter(
+                RecordingModel.filename == filename
+            )
+            .first()
+        )
+
+        if existing is not None:
+            return existing.id
+
+        new_recording = RecordingModel(
+            camera_id=int(segment["camera_id"]),
+            filename=filename,
+            start_time=segment["start_time"],
+            end_time=segment["end_time"],
+            duration_seconds=int(
+                segment.get("duration_seconds") or 0
+            ),
+            status="completed",
+        )
+
+        db.add(new_recording)
+        db.commit()
+        db.refresh(new_recording)
+
+        print(
+            f"Saved recording segment #{new_recording.id}: "
+            f"{filename}"
+        )
+
+        return new_recording.id
+
+    except Exception as exc:
+
+        db.rollback()
+
+        print(
+            "Could not save recording segment to database: "
+            f"{exc}"
+        )
+
+        return None
+
+    finally:
+        db.close()
+
+
+# ============================================================
 # START RECORDING
 # ============================================================
 
@@ -602,7 +696,6 @@ def start_camera_recording(
             .first()
         )
 
-
         if camera is None:
 
             raise HTTPException(
@@ -610,44 +703,56 @@ def start_camera_recording(
                 detail="Camera not found"
             )
 
+        camera_type = (
+            str(camera.camera_type or "USB")
+            .strip()
+            .upper()
+        )
 
-        if (
-            camera.camera_type.upper()
-            != "USB"
-        ):
+        if camera_type == "USB":
+
+            if camera.device_index is None:
+
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "USB camera does not "
+                        "have a device index."
+                    )
+                )
+
+        elif camera_type == "IP":
+
+            if not camera.rtsp_url:
+
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "IP camera does not "
+                        "have an RTSP URL."
+                    )
+                )
+
+        else:
 
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Recording currently "
-                    "supports USB cameras only."
+                    f"Camera type '{camera_type}' "
+                    "is not supported for recording. "
+                    "Use USB or IP."
                 )
             )
-
-
-        if camera.device_index is None:
-
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "USB camera does not "
-                    "have a device index."
-                )
-            )
-
 
         success, result = (
             start_recording(
-
-                camera_id=
-                    camera.id,
-
-                device_index=
-                    camera.device_index
-
+                camera_id=camera.id,
+                device_index=camera.device_index,
+                camera_type=camera_type,
+                rtsp_url=camera.rtsp_url,
+                on_segment_ready=save_recording_segment,
             )
         )
-
 
         if not success:
 
@@ -656,26 +761,26 @@ def start_camera_recording(
                 detail=result
             )
 
-
         return {
-
             "message":
                 "Recording started successfully",
-
             "camera_id":
                 camera.id,
-
-            "filename":
-                result["filename"],
-
+            "camera_type":
+                camera_type,
             "start_time":
-                result["start_time"]
-
+                result["start_time"],
+            "segment_duration_seconds":
+                result.get(
+                    "segment_duration_seconds",
+                    300,
+                ),
         }
 
     finally:
 
         db.close()
+
 
 
 # ============================================================
@@ -689,109 +794,89 @@ def stop_camera_recording(
     camera_id: int
 ):
 
-    db: Session = SessionLocal()
+    # Stop the recorder. It returns all finalized segments,
+    # including the final short segment.
+    success, result = stop_recording(
+        camera_id
+    )
 
-    try:
+    if not success:
 
-        camera = (
-            db.query(CameraModel)
-            .filter(
-                CameraModel.id == camera_id
+        raise HTTPException(
+            status_code=400,
+            detail=result
+        )
+
+    # --------------------------------------------------------
+    # SAVE ALL FINAL SEGMENTS TO POSTGRESQL
+    # --------------------------------------------------------
+    # The recorder returns final filenames after H.264 conversion.
+    # save_recording_segment() checks filename duplicates, so it is
+    # safe if an earlier automatic callback already saved a segment.
+
+    segments_saved = 0
+    segment_ids = []
+
+    for segment in result.get(
+        "segments",
+        []
+    ):
+
+        saved_id = save_recording_segment(
+            segment
+        )
+
+        if saved_id is not None:
+
+            segment_ids.append(
+                saved_id
             )
-            .first()
-        )
 
+            segments_saved += 1
 
-        if camera is None:
+    return {
+        "message":
+            "Recording stopped successfully",
 
-            raise HTTPException(
-                status_code=404,
-                detail="Camera not found"
-            )
+        "camera_id":
+            result["camera_id"],
 
+        "start_time":
+            result["start_time"],
 
-        success, result = (
-            stop_recording(
-                camera_id
-            )
-        )
+        "end_time":
+            result["end_time"],
 
+        "duration_seconds":
+            result["duration_seconds"],
 
-        if not success:
+        "format":
+            result["format"],
 
-            raise HTTPException(
-                status_code=400,
-                detail=result
-            )
+        "camera_type":
+            result.get(
+                "camera_type",
+                "USB",
+            ),
 
+        "segment_duration_seconds":
+            result.get(
+                "segment_duration_seconds",
+                300,
+            ),
 
-        new_recording = RecordingModel(
+        "segments":
+            result.get(
+                "segments",
+                [],
+            ),
 
-            camera_id=
-                result["camera_id"],
+        "segments_saved":
+            segments_saved,
 
-            filename=
-                result["filename"],
-
-            start_time=
-                result["start_time"],
-
-            end_time=
-                result["end_time"],
-
-            duration_seconds=
-                result[
-                    "duration_seconds"
-                ],
-
-            status=
-                "completed"
-
-        )
-
-
-        db.add(
-            new_recording
-        )
-
-        db.commit()
-
-        db.refresh(
-            new_recording
-        )
-
-
-        return {
-
-            "message":
-                "Recording stopped successfully",
-
-            "recording_id":
-                new_recording.id,
-
-            "camera_id":
-                new_recording.camera_id,
-
-            "filename":
-                new_recording.filename,
-
-            "start_time":
-                new_recording.start_time,
-
-            "end_time":
-                new_recording.end_time,
-
-            "duration_seconds":
-                new_recording.duration_seconds,
-
-            "status":
-                new_recording.status
-
-        }
-
-    finally:
-
-        db.close()
+        "segment_ids":
+            segment_ids,
+    }
 
 
 # ============================================================

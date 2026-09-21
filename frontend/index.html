@@ -14,8 +14,257 @@
 
     <link
         rel="stylesheet"
-        href="/static/style.css"
+        href="/static/style.css?v=20260921"
     >
+
+    <style>
+        /* =====================================================
+           DASHBOARD MENU
+        ====================================================== */
+
+        .site-header {
+            position: relative;
+            z-index: 9999;
+
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 20px;
+
+            width: 100%;
+            min-height: 72px;
+
+            padding: 14px 22px;
+
+            background: #1f2937;
+            color: #ffffff;
+        }
+
+        .header-title {
+            min-width: 0;
+        }
+
+        .header-title h1 {
+            margin: 0 0 4px 0;
+            color: #ffffff;
+            font-size: 24px;
+            line-height: 1.2;
+        }
+
+        .header-title p {
+            margin: 0;
+            color: #e5e7eb;
+            font-size: 14px;
+        }
+
+        .top-menu {
+            position: relative;
+            z-index: 10000;
+            margin-left: auto;
+        }
+
+        .menu-button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+
+            min-width: 105px;
+            height: 40px;
+
+            padding: 0 15px;
+
+            background: #374151;
+            color: #ffffff;
+
+            border: 1px solid #4b5563;
+            border-radius: 7px;
+
+            cursor: pointer;
+
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .menu-button:hover,
+        .menu-button.active {
+            background: #2563eb;
+        }
+
+        .menu-panel {
+            position: absolute;
+
+            top: 48px;
+            right: 0;
+
+            width: 230px;
+
+            display: none;
+
+            padding: 6px 0;
+
+            background: #ffffff;
+
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+
+            box-shadow:
+                0 8px 24px rgba(0, 0, 0, 0.25);
+
+            overflow: hidden;
+            z-index: 11000;
+        }
+
+        .menu-panel.show {
+            display: block;
+        }
+
+        .menu-panel a {
+            display: block;
+
+            width: 100%;
+
+            padding: 13px 15px;
+
+            background: #ffffff;
+            color: #111827;
+
+            text-decoration: none;
+
+            font-size: 14px;
+            line-height: 1.3;
+        }
+
+        .menu-panel a:hover {
+            background: #f3f4f6;
+            color: #2563eb;
+        }
+
+
+        /* =====================================================
+           LIVE WALL
+        ====================================================== */
+
+        .camera-monitoring-card {
+            padding: 16px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+
+            gap: 15px;
+
+            margin-bottom: 12px;
+        }
+
+        .section-header h2 {
+            margin: 0 0 4px 0;
+            font-size: 20px;
+        }
+
+        .camera-wall-label {
+            display: inline-block;
+
+            padding: 4px 9px;
+
+            background: #e5e7eb;
+            color: #374151;
+
+            border-radius: 14px;
+
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .live-wall-controls {
+            display: flex;
+            gap: 7px;
+            flex-wrap: wrap;
+        }
+
+        .live-wall-controls button {
+            margin: 0;
+        }
+
+        .start-all-live-button {
+            background: #16a34a;
+        }
+
+        .stop-all-live-button {
+            background: #111827;
+        }
+
+
+        /* =====================================================
+           4 x 4 GRID
+        ====================================================== */
+
+        .camera-grid {
+            display: grid;
+
+            grid-template-columns:
+                repeat(4, minmax(0, 1fr));
+
+            gap: 10px;
+        }
+
+
+        /* =====================================================
+           MOBILE
+        ====================================================== */
+
+        @media (max-width: 1300px) {
+
+            .camera-grid {
+                grid-template-columns:
+                    repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 950px) {
+
+            .camera-grid {
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+            }
+
+            .section-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (max-width: 600px) {
+
+            .site-header {
+                padding: 12px 14px;
+            }
+
+            .header-title h1 {
+                font-size: 18px;
+            }
+
+            .header-title p {
+                font-size: 12px;
+            }
+
+            .menu-button {
+                min-width: 88px;
+                height: 36px;
+                padding: 0 11px;
+            }
+
+            .menu-panel {
+                width: 195px;
+            }
+
+            .camera-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 
 </head>
 
@@ -27,289 +276,362 @@
          HEADER
     ====================================================== -->
 
-    <header>
+    <header class="site-header">
 
-        <h1>
-            Smart Video Management System
-        </h1>
+        <div class="header-title">
 
-        <p>
-            Camera Dashboard
-        </p>
+            <h1>
+                Smart Video Management System
+            </h1>
+
+            <p>
+                Live Camera Monitoring
+            </p>
+
+        </div>
+
+
+        <!-- =================================================
+             TOP RIGHT MENU
+        ================================================== -->
+
+        <div class="top-menu">
+
+            <button
+                type="button"
+                id="menuToggle"
+                class="menu-button"
+                aria-expanded="false"
+                aria-controls="menuPanel"
+            >
+                ☰ Menu
+            </button>
+
+
+            <div
+                id="menuPanel"
+                class="menu-panel"
+            >
+
+                <a href="/">
+                    🖥 Dashboard
+                </a>
+
+                <a href="/add-camera">
+                    📷 Add Camera
+                </a>
+
+                <a href="/recording-history">
+                    🎥 Recording History
+                </a>
+
+            </div>
+
+        </div>
 
     </header>
-
 
 
     <main>
 
 
         <!-- =================================================
-             LIVE CAMERA VIEW
+             4 x 4 CAMERA MONITORING WALL
         ================================================== -->
 
-        <section class="card">
+        <section
+            class="card camera-monitoring-card"
+        >
 
-            <h2 id="liveCameraTitle">
-                Live Camera View
-            </h2>
+            <div class="section-header">
+
+                <div>
+
+                    <h2>
+                        Camera Monitoring
+                    </h2>
+
+                    <span class="camera-wall-label">
+                        Auto Screen Wall
+                    </span>
+
+                </div>
 
 
-            <div class="video-container">
+                <div class="screen-mode-control">
 
-                <img
-                    id="liveVideo"
-                    alt="Live camera video"
-                    style="display: none;"
-                >
+                    <label for="screenModeSelect">
+                        Screen:
+                    </label>
+
+                    <select
+                        id="screenModeSelect"
+                        title="Choose number of camera screens"
+                    >
+                        <option value="auto">
+                            Auto
+                        </option>
+                        <option value="4">
+                            4 Screens
+                        </option>
+                        <option value="8">
+                            8 Screens
+                        </option>
+                        <option value="12">
+                            12 Screens
+                        </option>
+                        <option value="16">
+                            16 Screens
+                        </option>
+                    </select>
+
+                    <span id="screenModeLabel">
+                        Auto: 4 Screens
+                    </span>
+
+                </div>
 
 
-                <p id="videoMessage">
+                <div class="live-wall-controls">
 
-                    Select a camera and click
-                    "View Live".
+                    <button
+                        type="button"
+                        id="startAllLive"
+                        class="start-all-live-button"
+                    >
+                        ▶ Start All Live
+                    </button>
 
-                </p>
+
+                    <button
+                        type="button"
+                        id="stopAllLive"
+                        class="stop-all-live-button"
+                    >
+                        ■ Stop Live
+                    </button>
+
+
+                    <button
+                        type="button"
+                        id="startAllRecording"
+                        class="start-all-recording-button"
+                    >
+                        🔴 Start All Recording
+                    </button>
+
+
+                    <button
+                        type="button"
+                        id="stopAllRecording"
+                        class="stop-all-recording-button"
+                    >
+                        ⏹ Stop All Recording
+                    </button>
+
+
+                    <button
+                        type="button"
+                        id="fullscreenWall"
+                        class="fullscreen-wall-button"
+                    >
+                        ⛶ Full Screen
+                    </button>
+
+                </div>
 
             </div>
 
-        </section>
-
-
-
-
-        <!-- =================================================
-             ADD CAMERA
-        ================================================== -->
-
-        <section class="card">
-
-            <h2>
-                Add Camera
-            </h2>
-
-
-            <form id="cameraForm">
-
-
-                <!-- Camera Name -->
-
-                <input
-                    type="text"
-                    id="name"
-                    placeholder="Camera Name"
-                    required
-                    autocomplete="off"
-                >
-
-
-                <!-- IP Address -->
-
-                <input
-                    type="text"
-                    id="ip_address"
-                    placeholder="IP Address"
-                    autocomplete="off"
-                >
-
-
-                <!-- Camera Type -->
-
-                <select id="camera_type">
-
-                    <option value="IP">
-                        IP Camera
-                    </option>
-
-                    <option value="USB">
-                        USB Camera
-                    </option>
-
-                    <option value="NORMAL">
-                        Normal Camera
-                    </option>
-
-                </select>
-
-
-                <!-- Device Index -->
-
-                <input
-                    type="number"
-                    id="device_index"
-                    placeholder="Device Index"
-                    value="0"
-                    min="0"
-                >
-
-
-                <!-- Location -->
-
-                <input
-                    type="text"
-                    id="location"
-                    placeholder="Location"
-                    autocomplete="off"
-                >
-
-
-                <!-- Username -->
-
-                <input
-                    type="text"
-                    id="username"
-                    placeholder="Username"
-                    autocomplete="username"
-                >
-
-
-                <!-- Password -->
-
-                <input
-                    type="password"
-                    id="password"
-                    placeholder="Password"
-                    autocomplete="current-password"
-                >
-
-
-                <!-- RTSP URL -->
-
-                <input
-                    type="text"
-                    id="rtsp_url"
-                    placeholder="RTSP URL"
-                    autocomplete="off"
-                >
-
-
-                <!-- Status -->
-
-                <select id="status">
-
-                    <option value="online">
-                        Online
-                    </option>
-
-                    <option value="offline">
-                        Offline
-                    </option>
-
-                </select>
-
-
-                <!-- Add Camera -->
-
-                <button
-                    type="submit"
-                >
-                    Add Camera
-                </button>
-
-
-            </form>
-
-        </section>
-
-
-
-        <!-- =================================================
-             CAMERA LIST
-        ================================================== -->
-
-        <section class="card">
-
-            <h2>
-                Camera Monitoring
-            </h2>
 
             <div
                 class="camera-grid"
                 id="cameraList"
             >
+
                 <p>
                     Loading cameras...
                 </p>
-            </div>
-
-        </section>
-
-
-
-        <!-- =================================================
-             RECORDING HISTORY
-        ================================================== -->
-
-        <section class="card">
-
-            <h2>
-                Recording History
-            </h2>
-
-            <div class="recording-filters">
-
-                <input
-                    type="text"
-                    id="recordingSearch"
-                    placeholder="Search filename..."
-                >
-
-                <input
-                    type="number"
-                    id="recordingCameraFilter"
-                    placeholder="Camera ID"
-                    min="1"
-                >
-
-                <select id="recordingStatusFilter">
-
-                    <option value="">
-                        All Status
-                    </option>
-
-                    <option value="completed">
-                        Completed
-                    </option>
-
-                    <option value="recording">
-                        Recording
-                    </option>
-
-                    <option value="failed">
-                        Failed
-                    </option>
-
-                </select>
-
-                <button
-                    type="button"
-                    id="clearRecordingFilters"
-                >
-                    Clear Filters
-                </button>
-
-            </div>
-
-            <div id="recordingList">
-
-                <p>
-                    Loading recordings...
-                </p>
 
             </div>
 
         </section>
-
 
     </main>
 
 
     <!-- =====================================================
-         JAVASCRIPT
+         MENU JAVASCRIPT
     ====================================================== -->
 
+    <script>
+
+        (function () {
+
+            const menuToggle =
+                document.getElementById(
+                    "menuToggle"
+                );
+
+            const menuPanel =
+                document.getElementById(
+                    "menuPanel"
+                );
+
+
+            if (
+                !menuToggle
+                ||
+                !menuPanel
+            ) {
+
+                return;
+
+            }
+
+
+            menuToggle.addEventListener(
+                "click",
+                function (event) {
+
+                    event.stopPropagation();
+
+
+                    const isOpen =
+                        menuPanel.classList.toggle(
+                            "show"
+                        );
+
+
+                    menuToggle.classList.toggle(
+                        "active",
+                        isOpen
+                    );
+
+
+                    menuToggle.setAttribute(
+                        "aria-expanded",
+                        String(isOpen)
+                    );
+
+                }
+            );
+
+
+            document.addEventListener(
+                "click",
+                function (event) {
+
+                    if (
+                        !menuPanel.contains(
+                            event.target
+                        )
+                        &&
+                        !menuToggle.contains(
+                            event.target
+                        )
+                    ) {
+
+                        menuPanel.classList.remove(
+                            "show"
+                        );
+
+
+                        menuToggle.classList.remove(
+                            "active"
+                        );
+
+
+                        menuToggle.setAttribute(
+                            "aria-expanded",
+                            "false"
+                        );
+
+                    }
+
+                }
+            );
+
+        })();
+
+
+        // Full-screen 4x4 monitoring wall.
+        const fullscreenButton =
+            document.getElementById("fullscreenWall");
+
+        if (fullscreenButton) {
+
+            fullscreenButton.addEventListener(
+                "click",
+                async function () {
+
+                    const wall =
+                        document.querySelector(
+                            ".camera-monitoring-card"
+                        );
+
+                    if (!wall) {
+                        return;
+                    }
+
+                    try {
+
+                        if (!document.fullscreenElement) {
+
+                            await wall.requestFullscreen();
+
+                            fullscreenButton.textContent =
+                                "⛶ Exit Full Screen";
+
+                        } else {
+
+                            await document.exitFullscreen();
+
+                            fullscreenButton.textContent =
+                                "⛶ Full Screen";
+
+                        }
+
+                    } catch (error) {
+
+                        console.error(
+                            "Fullscreen error:",
+                            error
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+
+
+        document.addEventListener(
+            "fullscreenchange",
+            function () {
+
+                const button =
+                    document.getElementById(
+                        "fullscreenWall"
+                    );
+
+                if (!button) {
+                    return;
+                }
+
+                button.textContent =
+                    document.fullscreenElement
+                        ? "⛶ Exit Full Screen"
+                        : "⛶ Full Screen";
+
+            }
+        );
+
+    </script>
+
+
     <script
-        src="/static/app.js"
+        src="/static/app.js?v=20260921"
     ></script>
 
 

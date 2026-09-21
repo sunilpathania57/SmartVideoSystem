@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recording History - Smart Video Management System</title>
+
+    <link rel="stylesheet" href="/static/style.css?v=20260921">
+    <style>
+/* ---------- common page reset ---------- */
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: Arial, sans-serif;
+    background: #f4f6f8;
+    color: #222;
+}
+
+body {
+    min-height: 100vh;
+}
+
+/* ---------- header ---------- */
+.site-header {
+    position: relative;
+    z-index: 5000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    width: 100%;
+    min-height: 72px;
+    padding: 14px 22px;
+    background: #1f2937;
+    color: #fff;
+}
+
+.header-title h1 {
+    margin: 0 0 4px;
+    color: #fff;
+    font-size: 24px;
+    line-height: 1.2;
+}
+
+.header-title p {
+    margin: 0;
+    color: #e5e7eb;
+    font-size: 14px;
+}
+
+/* ---------- top-right menu ---------- */
+.top-menu {
+    position: relative;
+    z-index: 6000;
+    margin-left: auto;
+}
+
+.menu-button {
+    min-width: 105px;
+    height: 40px;
+    padding: 0 15px;
+    border: 1px solid #4b5563;
+    border-radius: 7px;
+    background: #374151;
+    color: #fff;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.menu-button:hover,
+.menu-button.active {
+    background: #2563eb;
+}
+
+.menu-panel {
+    position: absolute;
+    top: 48px;
+    right: 0;
+    width: 230px;
+    display: none;
+    padding: 6px 0;
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.22);
+    overflow: hidden;
+    z-index: 7000;
+}
+
+.menu-panel.show {
+    display: block;
+}
+
+.menu-panel a {
+    display: block;
+    width: 100%;
+    padding: 13px 15px;
+    color: #111827;
+    background: #fff;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.menu-panel a:hover {
+    background: #f3f4f6;
+    color: #2563eb;
+}
+
+/* ---------- layout ---------- */
+main {
+    max-width: 1400px;
+    margin: 18px auto;
+    padding: 0 18px;
+}
+
+.card {
+    margin-bottom: 16px;
+    padding: 20px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0,0,0,.07);
+}
+
+.card h2 {
+    margin: 0 0 12px;
+    font-size: 20px;
+}
+
+.page-description {
+    margin: 0;
+    color: #6b7280;
+    font-size: 14px;
+}
+
+/* ---------- forms ---------- */
+form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+input, select {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 11px;
+    border: 1px solid #cfd4da;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 14px;
+}
+
+button {
+    padding: 9px 13px;
+    border: 0;
+    border-radius: 6px;
+    background: #2563eb;
+    color: #fff;
+    cursor: pointer;
+}
+
+button:hover {
+    opacity: .88;
+}
+
+/* ---------- recording page ---------- */
+.recording-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.recording-list-scroll {
+    max-height: 700px;
+    overflow-y: auto;
+}
+
+.recording-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    padding: 12px;
+    margin-bottom: 10px;
+    border: 1px solid #dfe3e8;
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.recording-item p {
+    margin: 4px 0;
+    font-size: 13px;
+}
+
+.recording-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.recording-actions button {
+    margin: 0;
+}
+
+.recording-actions a {
+    display: inline-block;
+    padding: 8px 11px;
+    border-radius: 6px;
+    background: #374151;
+    color: #fff;
+    text-decoration: none;
+    font-size: 13px;
+}
+
+/* ---------- add camera ---------- */
+.add-camera-page details summary {
+    cursor: pointer;
+    font-size: 16px;
+}
+
+/* ---------- responsive ---------- */
+@media (max-width: 700px) {
+    .site-header {
+        padding: 12px 14px;
+    }
+
+    .header-title h1 {
+        font-size: 18px;
+    }
+
+    .header-title p {
+        font-size: 12px;
+    }
+
+    .menu-button {
+        min-width: 88px;
+        padding: 0 11px;
+    }
+
+    .menu-panel {
+        width: 195px;
+    }
+
+    main {
+        padding: 0 10px;
+    }
+
+    .recording-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    input, select {
+        min-width: 100%;
+    }
+}
+</style>
+</head>
+
+<body>
+
+
+<header class="site-header">
+
+    <div class="header-title">
+        <h1>Smart Video Management System</h1>
+        <p>Recording History</p>
+    </div>
+
+    <div class="top-menu">
+
+        <button
+            type="button"
+            id="menuToggle"
+            class="menu-button"
+            aria-expanded="false"
+            aria-controls="menuPanel"
+        >
+            ☰ Menu
+        </button>
+
+        <div
+            id="menuPanel"
+            class="menu-panel"
+        >
+            <a href="/">🖥 Dashboard</a>
+            <a href="/add-camera">📷 Add Camera</a>
+            <a href="/recording-history">🎥 Recording History</a>
+        </div>
+
+    </div>
+
+</header>
+
+
+<main>
+
+    <section class="card">
+        <h2>Recording History</h2>
+        <p class="page-description">
+            Search, play, and download recorded camera footage.
+        </p>
+    </section>
+
+    <section class="card">
+
+        <div class="recording-filters">
+
+            <input
+                type="text"
+                id="recordingSearch"
+                placeholder="Search filename..."
+            >
+
+            <input
+                type="number"
+                id="recordingCameraFilter"
+                placeholder="Camera ID"
+                min="1"
+            >
+
+            <select id="recordingStatusFilter">
+                <option value="">All Status</option>
+                <option value="completed">Completed</option>
+                <option value="recording">Recording</option>
+                <option value="failed">Failed</option>
+            </select>
+
+            <button
+                type="button"
+                id="clearRecordingFilters"
+            >
+                Clear Filters
+            </button>
+
+        </div>
+
+        <div
+            id="recordingList"
+            class="recording-list-scroll"
+        >
+            <p>Loading recordings...</p>
+        </div>
+
+    </section>
+
+</main>
+
+
+<script>
+(function () {
+    const toggle = document.getElementById("menuToggle");
+    const panel = document.getElementById("menuPanel");
+
+    if (!toggle || !panel) {
+        return;
+    }
+
+    toggle.addEventListener("click", function (event) {
+        event.stopPropagation();
+
+        const open = panel.classList.toggle("show");
+
+        toggle.classList.toggle("active", open);
+        toggle.setAttribute("aria-expanded", String(open));
+    });
+
+    document.addEventListener("click", function (event) {
+        if (!panel.contains(event.target) &&
+            !toggle.contains(event.target)) {
+
+            panel.classList.remove("show");
+            toggle.classList.remove("active");
+            toggle.setAttribute("aria-expanded", "false");
+        }
+    });
+})();
+</script>
+
+
+<script src="/static/app.js?v=20260921"></script>
+
+</body>
+</html>

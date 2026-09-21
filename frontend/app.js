@@ -10,8 +10,16 @@
 
 const recordingCameras = new Set();
 
-// 4 x 4 CCTV monitoring wall = 16 camera positions.
-const DASHBOARD_CAMERA_SLOTS = 16;
+// Dynamic CCTV wall screen modes.
+const CAMERA_SCREEN_OPTIONS = [4, 8, 12, 16];
+
+let selectedScreenMode = "auto";
+let currentScreenSlots = 4;
+
+// Automatically refresh Recording History so newly completed
+// segments saved by the backend appear without manual refresh.
+let recordingRefreshTimer = null;
+let recordingRefreshInProgress = false;
 
 
 // ============================================================
@@ -24,9 +32,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setupCameraForm();
 
+    setupLiveWallControls();
+
+    setupAllRecordingControls();
+
+    setupScreenModeControls();
+
     loadCameras();
 
     loadRecordings();
+
+    startRecordingHistoryRefresh();
 
 });
 
@@ -76,17 +92,32 @@ async function loadCameras() {
         const cameras =
             await response.json();
 
+        window.smartVideoCameras =
+            Array.isArray(cameras)
+                ? cameras
+                : [];
+
 
         cameraList.innerHTML = "";
 
 
         if (!Array.isArray(cameras) || cameras.length === 0) {
 
+            currentScreenSlots = 4;
+
+            updateScreenModeDisplay(0);
+
             cameraList.innerHTML =
                 "<p>No cameras found.</p>";
 
             return;
         }
+
+
+        currentScreenSlots =
+            getScreenSlotCount(cameras.length);
+
+        updateScreenModeDisplay(cameras.length);
 
 
         cameras.forEach(camera => {
@@ -98,14 +129,18 @@ async function loadCameras() {
 
         });
 
-        // Keep a 4x4 dashboard visible while testing.
+        // Keep four dashboard positions visible while testing.
         // Empty positions are visual placeholders only and are NOT
         // added to the database as fake cameras.
         addEmptyCameraSlots(
             cameras.length,
-            DASHBOARD_CAMERA_SLOTS,
+            currentScreenSlots,
             cameraList
         );
+
+        // Start live view for every configured camera source.
+        // USB cameras should use unique device indexes.
+        startAllCameraTiles(cameras);
 
     }
 
@@ -132,6 +167,125 @@ async function loadCameras() {
 
     }
 
+}
+
+
+// ============================================================
+// DYNAMIC CAMERA SCREEN MODE
+// ============================================================
+
+function getScreenSlotCount(cameraCount) {
+
+    if (selectedScreenMode !== "auto") {
+        return Number(selectedScreenMode);
+    }
+
+    if (cameraCount <= 4) {
+        return 4;
+    }
+
+    if (cameraCount <= 8) {
+        return 8;
+    }
+
+    if (cameraCount <= 12) {
+        return 12;
+    }
+
+    return 16;
+}
+
+
+function updateScreenModeDisplay(cameraCount) {
+
+    const label =
+        document.getElementById("screenModeLabel");
+
+    if (label) {
+
+        label.textContent =
+            selectedScreenMode === "auto"
+                ? `Auto: ${currentScreenSlots} Screens`
+                : `${currentScreenSlots} Screens`;
+    }
+
+    const select =
+        document.getElementById("screenModeSelect");
+
+    if (select) {
+        select.value = selectedScreenMode;
+    }
+
+    const cameraList =
+        document.getElementById("cameraList");
+
+    if (cameraList) {
+
+        cameraList.classList.remove(
+            "screen-4",
+            "screen-8",
+            "screen-12",
+            "screen-16"
+        );
+
+        cameraList.classList.add(
+            `screen-${currentScreenSlots}`
+        );
+    }
+}
+
+
+function setupScreenModeControls() {
+
+    const select =
+        document.getElementById("screenModeSelect");
+
+    if (!select) {
+        return;
+    }
+
+    select.addEventListener(
+        "change",
+        function () {
+
+            selectedScreenMode =
+                select.value;
+
+            const cameras =
+                window.smartVideoCameras || [];
+
+            currentScreenSlots =
+                getScreenSlotCount(cameras.length);
+
+            updateScreenModeDisplay(cameras.length);
+
+            const cameraList =
+                document.getElementById("cameraList");
+
+            if (!cameraList) {
+                return;
+            }
+
+            cameraList.innerHTML = "";
+
+            cameras.forEach(
+                camera => {
+                    createCameraCard(
+                        camera,
+                        cameraList
+                    );
+                }
+            );
+
+            addEmptyCameraSlots(
+                cameras.length,
+                currentScreenSlots,
+                cameraList
+            );
+
+            startAllCameraTiles(cameras);
+        }
+    );
 }
 
 
@@ -263,19 +417,31 @@ function createCameraCard(
 
         <div class="camera-card-header">
 
-            <h3>
-                ${escapeHtml(
-                    camera.name || "Unnamed Camera"
-                )}
-            </h3>
+            <div class="camera-title-area">
 
-            <span
-                class="status-badge ${escapeHtml(status)}"
-            >
-                ${escapeHtml(
-                    status
-                ).toUpperCase()}
-            </span>
+                <h3>
+                    CAM ${camera.id}
+                </h3>
+
+            </div>
+
+            <div class="camera-status-area">
+
+                <span
+                    class="status-badge ${escapeHtml(status)}"
+                >
+                    ${escapeHtml(
+                        status
+                    ).toUpperCase()}
+                </span>
+
+                <span
+                    class="recording-indicator ${isRecording ? "recording-on" : ""}"
+                >
+                    ${isRecording ? "● REC" : "● LIVE"}
+                </span>
+
+            </div>
 
         </div>
 
@@ -310,64 +476,28 @@ function createCameraCard(
                       `
             }
 
+            <div class="camera-overlay">
+
+                <span class="camera-live-label">
+                    ${hasVideoSource ? "LIVE VIEW" : "NO SIGNAL"}
+                </span>
+
+                <span class="camera-location-label">
+                    ${escapeHtml(camera.location || "")}
+                </span>
+
+            </div>
+
         </div>
 
 
         <div class="camera-card-body">
 
-            <p>
-                <strong>Camera ID:</strong>
-                ${camera.id}
-            </p>
-
-
-            <p>
-                <strong>IP:</strong>
-                ${escapeHtml(
-                    camera.ip_address || "-"
-                )}
-            </p>
-
-
-            <p>
-                <strong>Type:</strong>
-                ${escapeHtml(cameraType)}
-            </p>
-
-
-            <p>
+            <p class="camera-location-only">
                 <strong>Location:</strong>
                 ${escapeHtml(
                     camera.location || "-"
                 )}
-            </p>
-
-
-            <p>
-                <strong>Device Index:</strong>
-                ${deviceIndex}
-            </p>
-
-
-            <p>
-                <strong>Recording:</strong>
-
-                <span
-                    class="recording-status"
-                    style="
-                        font-weight:bold;
-                        color:${isRecording ? "red" : "inherit"};
-                    "
-                >
-
-                    ${
-                        isRecording
-                            ? "🔴 RECORDING"
-                            : "Not Recording"
-                    }
-
-                </span>
-
             </p>
 
         </div>
@@ -794,11 +924,221 @@ function startCameraTile(
     buttonElement
 ) {
 
-    // Stop the large live preview first.
-    // This helps avoid opening two capture sessions
-    // on the same USB webcam.
-    stopLiveCamera();
+    const image =
+        document.getElementById(
+            `camera-live-${cameraId}`
+        );
 
+    const noSignal =
+        document.getElementById(
+            `camera-no-signal-${cameraId}`
+        );
+
+    if (!image) {
+
+        return false;
+
+    }
+
+    image.src =
+        `/video-feed/${cameraId}?tile=${Date.now()}`;
+
+    image.style.display =
+        "block";
+
+    if (noSignal) {
+
+        noSignal.style.display =
+            "none";
+
+    }
+
+    if (buttonElement) {
+
+        buttonElement.textContent =
+            "■ Stop Tile";
+
+        buttonElement.dataset.tileActive =
+            "true";
+
+    }
+
+    return true;
+
+}
+
+
+// ============================================================
+// START ALL CAMERA TILES
+// ============================================================
+
+function startAllCameraTiles(
+    cameras = []
+) {
+
+    const seenUsbDevices =
+        new Set();
+
+    cameras.forEach(
+        camera => {
+
+            const cameraType =
+                String(
+                    camera.camera_type || "IP"
+                )
+                .trim()
+                .toUpperCase();
+
+            const hasUsbSource =
+                cameraType === "USB"
+                &&
+                camera.device_index !== null
+                &&
+                camera.device_index !== undefined;
+
+            const hasRtspSource =
+                cameraType === "IP"
+                &&
+                Boolean(camera.rtsp_url);
+
+            if (
+                !hasUsbSource
+                &&
+                !hasRtspSource
+            ) {
+
+                return;
+
+            }
+
+            // A USB camera used for recording should not also be
+            // opened by the live tile. After recording stops,
+            // loadCameras() will start the live tile again.
+            if (
+                hasUsbSource
+                &&
+                recordingCameras.has(
+                    Number(camera.id)
+                )
+            ) {
+
+                return;
+
+            }
+
+            // A physical USB device should not be opened twice.
+            if (hasUsbSource) {
+
+                const deviceIndex =
+                    Number(
+                        camera.device_index
+                    );
+
+                if (
+                    seenUsbDevices.has(
+                        deviceIndex
+                    )
+                ) {
+
+                    console.warn(
+                        `USB device ${deviceIndex} `
+                        + "is already used by another camera."
+                    );
+
+                    return;
+
+                }
+
+                seenUsbDevices.add(
+                    deviceIndex
+                );
+
+            }
+
+            const image =
+                document.getElementById(
+                    `camera-live-${camera.id}`
+                );
+
+            const button =
+                image
+                    ? image
+                        .closest(".camera-card")
+                        ?.querySelector(
+                            ".grid-live-button"
+                        )
+                    : null;
+
+            startCameraTile(
+                camera.id,
+                button
+            );
+
+        }
+    );
+
+}
+
+
+function stopAllCameraTiles() {
+
+    const tileImages =
+        document.querySelectorAll(
+            ".camera-live-image"
+        );
+
+    tileImages.forEach(
+        image => {
+
+            image.src = "";
+
+            image.style.display =
+                "none";
+
+        }
+    );
+
+    const noSignalElements =
+        document.querySelectorAll(
+            ".camera-no-signal"
+        );
+
+    noSignalElements.forEach(
+        element => {
+
+            element.style.display =
+                "flex";
+
+        }
+    );
+
+    const tileButtons =
+        document.querySelectorAll(
+            ".grid-live-button"
+        );
+
+    tileButtons.forEach(
+        button => {
+
+            button.textContent =
+                "▶ Live Tile";
+
+            button.dataset.tileActive =
+                "false";
+
+        }
+    );
+
+}
+
+
+// ============================================================
+// STOP ONE CAMERA TILE
+// ============================================================
+
+function stopCameraTileById(
+    cameraId
+) {
 
     const image =
         document.getElementById(
@@ -810,39 +1150,38 @@ function startCameraTile(
             `camera-no-signal-${cameraId}`
         );
 
+    const button =
+        image
+            ? image
+                .closest(".camera-card")
+                ?.querySelector(
+                    ".grid-live-button"
+                )
+            : null;
 
-    if (!image) {
+    if (image) {
 
-        alert(
-            "Camera preview element not found."
-        );
+        image.src = "";
 
-        return;
-
-    }
-
-
-    image.src =
-        `/video-feed/${cameraId}?tile=${Date.now()}`;
-
-    image.style.display =
-        "block";
-
-
-    if (noSignal) {
-
-        noSignal.style.display =
+        image.style.display =
             "none";
 
     }
 
+    if (noSignal) {
 
-    if (buttonElement) {
+        noSignal.style.display =
+            "flex";
 
-        buttonElement.textContent =
-            "■ Stop Tile";
+    }
 
-        buttonElement.dataset.tileActive = "true";
+    if (button) {
+
+        button.textContent =
+            "▶ Live Tile";
+
+        button.dataset.tileActive =
+            "false";
 
     }
 
@@ -852,6 +1191,7 @@ function startCameraTile(
 // ============================================================
 // STOP CAMERA TILE
 // ============================================================
+
 
 function stopCameraTile(
     cameraId,
@@ -905,8 +1245,9 @@ function stopCameraTile(
 
 async function startRecording(cameraId) {
 
-    // Stop preview first because the webcam
-    // may not support two simultaneous capture sessions.
+    // Stop the selected tile and large preview first.
+    // This prevents the same USB webcam from being opened twice.
+    stopCameraTileById(cameraId);
     stopLiveCamera();
 
 
@@ -958,6 +1299,9 @@ async function startRecording(cameraId) {
 
         // Immediately redraw buttons
         await loadCameras();
+
+        // Refresh recording history as well.
+        await loadRecordings();
 
 
         alert(
@@ -1076,6 +1420,12 @@ async function stopRecording(cameraId) {
 // ============================================================
 
 async function loadRecordings() {
+
+    if (recordingRefreshInProgress) {
+        return;
+    }
+
+    recordingRefreshInProgress = true;
 
     const recordingList =
         document.getElementById(
@@ -1263,7 +1613,349 @@ if (playButton) {
             "<p>Unable to load recordings.</p>";
 
     }
+    finally {
 
+        recordingRefreshInProgress = false;
+
+    }
+
+}
+
+
+// ============================================================
+// AUTOMATIC RECORDING HISTORY REFRESH
+// ============================================================
+
+function startRecordingHistoryRefresh() {
+
+    if (recordingRefreshTimer !== null) {
+        clearInterval(recordingRefreshTimer);
+    }
+
+    // The recorder saves completed segments to PostgreSQL.
+    // Refresh every 3 seconds so the webpage shows new segments
+    // without requiring Ctrl + F5.
+    recordingRefreshTimer = setInterval(
+        () => {
+            loadRecordings();
+        },
+        3000
+    );
+
+}
+
+
+// ============================================================
+// LIVE WALL BUTTON SETUP
+// ============================================================
+
+function setupLiveWallControls() {
+
+    const startButton =
+        document.getElementById(
+            "startAllLive"
+        );
+
+    const stopButton =
+        document.getElementById(
+            "stopAllLive"
+        );
+
+    if (startButton) {
+
+        startButton.addEventListener(
+            "click",
+            startAllLiveFromDashboard
+        );
+
+    }
+
+    if (stopButton) {
+
+        stopButton.addEventListener(
+            "click",
+            stopAllLiveFromDashboard
+        );
+
+    }
+
+}
+
+
+// ============================================================
+// MANUAL LIVE WALL CONTROLS
+// ============================================================
+
+function startAllLiveFromDashboard() {
+
+    const cameras =
+        window.smartVideoCameras || [];
+
+    startAllCameraTiles(
+        cameras
+    );
+
+}
+
+
+function stopAllLiveFromDashboard() {
+
+    stopAllCameraTiles();
+
+}
+
+
+// ============================================================
+// START ALL RECORDINGS
+// ============================================================
+
+async function startAllRecordingsFromDashboard() {
+
+    const cameras =
+        window.smartVideoCameras || [];
+
+    const availableCameras =
+        cameras.filter(
+            camera => {
+
+                const cameraType =
+                    String(
+                        camera.camera_type || "IP"
+                    )
+                    .trim()
+                    .toUpperCase();
+
+                const hasUsbSource =
+                    cameraType === "USB"
+                    &&
+                    camera.device_index !== null
+                    &&
+                    camera.device_index !== undefined;
+
+                const hasRtspSource =
+                    cameraType === "IP"
+                    &&
+                    Boolean(camera.rtsp_url);
+
+                return (
+                    (hasUsbSource || hasRtspSource)
+                    &&
+                    !recordingCameras.has(
+                        Number(camera.id)
+                    )
+                );
+            }
+        );
+
+    if (availableCameras.length === 0) {
+
+        alert(
+            "No available cameras to start recording."
+        );
+
+        return;
+    }
+
+    // Stop all live tiles before starting recordings.
+    // This prevents the same USB source being opened twice.
+    stopAllCameraTiles();
+
+    let started = 0;
+    let failed = 0;
+
+    for (const camera of availableCameras) {
+
+        try {
+
+            const response =
+                await fetch(
+                    `/record/start/${camera.id}`,
+                    {
+                        method: "POST"
+                    }
+                );
+
+            const responseText =
+                await response.text();
+
+            let result = {};
+
+            try {
+
+                result = responseText
+                    ? JSON.parse(responseText)
+                    : {};
+
+            } catch {
+
+                result = {
+                    detail: responseText
+                };
+            }
+
+            if (!response.ok) {
+
+                throw new Error(
+                    result.detail ||
+                    result.message ||
+                    `Server returned ${response.status}`
+                );
+            }
+
+            recordingCameras.add(
+                Number(camera.id)
+            );
+
+            started += 1;
+
+        } catch (error) {
+
+            failed += 1;
+
+            console.error(
+                `Could not start recording for camera ${camera.id}:`,
+                error
+            );
+        }
+    }
+
+    await loadCameras();
+    await loadRecordings();
+
+    alert(
+        "Start All Recording completed.\n\n" +
+        `Started: ${started}\n` +
+        `Failed: ${failed}`
+    );
+}
+
+
+// ============================================================
+// STOP ALL RECORDINGS
+// ============================================================
+
+async function stopAllRecordingsFromDashboard() {
+
+    const ids =
+        Array.from(
+            recordingCameras
+        );
+
+    if (ids.length === 0) {
+
+        alert(
+            "No cameras are currently recording."
+        );
+
+        return;
+    }
+
+    let stopped = 0;
+    let failed = 0;
+
+    for (const cameraId of ids) {
+
+        try {
+
+            const response =
+                await fetch(
+                    `/record/stop/${cameraId}`,
+                    {
+                        method: "POST"
+                    }
+                );
+
+            const responseText =
+                await response.text();
+
+            let result = {};
+
+            try {
+
+                result = responseText
+                    ? JSON.parse(responseText)
+                    : {};
+
+            } catch {
+
+                result = {
+                    detail: responseText
+                };
+            }
+
+            if (!response.ok) {
+
+                throw new Error(
+                    result.detail ||
+                    result.message ||
+                    `Server returned ${response.status}`
+                );
+            }
+
+            recordingCameras.delete(
+                Number(cameraId)
+            );
+
+            stopped += 1;
+
+        } catch (error) {
+
+            failed += 1;
+
+            console.error(
+                `Could not stop recording for camera ${cameraId}:`,
+                error
+            );
+        }
+    }
+
+    await loadCameras();
+    await loadRecordings();
+
+    // Cameras no longer recording can return to live view.
+    startAllCameraTiles(
+        window.smartVideoCameras || []
+    );
+
+    alert(
+        "Stop All Recording completed.\n\n" +
+        `Stopped: ${stopped}\n` +
+        `Failed: ${failed}`
+    );
+}
+
+
+// ============================================================
+// SETUP GLOBAL RECORDING BUTTONS
+// ============================================================
+
+function setupAllRecordingControls() {
+
+    const startButton =
+        document.getElementById(
+            "startAllRecording"
+        );
+
+    const stopButton =
+        document.getElementById(
+            "stopAllRecording"
+        );
+
+    if (startButton) {
+
+        startButton.addEventListener(
+            "click",
+            startAllRecordingsFromDashboard
+        );
+    }
+
+    if (stopButton) {
+
+        stopButton.addEventListener(
+            "click",
+            stopAllRecordingsFromDashboard
+        );
+    }
 }
 
 
@@ -1308,8 +2000,7 @@ function viewLiveCamera(
     cameraName
 ) {
 
-    // Stop any card-level tile preview first.
-    stopAllCameraTiles();
+    // Grid tiles remain active while the large live view is displayed.
 
 
     const liveVideo =
@@ -1437,8 +2128,7 @@ function stopAllCameraTiles() {
 
 function stopLiveCamera() {
 
-    // Stop any card-level tile preview.
-    stopAllCameraTiles();
+    // The grid live wall is independent from the large live view.
 
 
     const liveVideo =
@@ -1565,6 +2255,11 @@ function setupCameraForm() {
                 username:
                     getInputValue(
                         "username"
+                    ),
+
+                password:
+                    getInputValue(
+                        "password"
                     ),
 
                 rtsp_url:
@@ -1729,6 +2424,15 @@ async function editCamera(cameraId) {
         if (newUsername === null) return;
 
 
+        const newPassword =
+            prompt(
+                "Password:",
+                camera.password || ""
+            );
+
+        if (newPassword === null) return;
+
+
         const newRtsp =
             prompt(
                 "RTSP URL:",
@@ -1803,6 +2507,9 @@ async function editCamera(cameraId) {
 
             username:
                 newUsername.trim(),
+
+            password:
+                newPassword,
 
             rtsp_url:
                 newRtsp.trim(),

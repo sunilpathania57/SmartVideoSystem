@@ -104,20 +104,9 @@ def home():
             FRONTEND_DIR / "index.html"
         )
     )
-
-
-@app.get(
-    "/add-camera",
-    include_in_schema=False
-)
-def add_camera_page():
-
-    return FileResponse(
-        str(
-            FRONTEND_DIR / "add-camera.html"
-        )
-    )
-
+# ============================================================
+# RECORDING HISTORY PAGE
+# ============================================================
 
 @app.get(
     "/recording-history",
@@ -609,7 +598,7 @@ def delete_camera(
 # AUTO-SAVE RECORDING SEGMENT
 # ============================================================
 
-def save_recording_segment(segment: dict):
+def save_recording_segment(segment: dict, camera_id: int | None = None):
     """Save one completed recording segment to PostgreSQL."""
 
     filename = str(
@@ -637,7 +626,11 @@ def save_recording_segment(segment: dict):
             return existing.id
 
         new_recording = RecordingModel(
-            camera_id=int(segment["camera_id"]),
+            camera_id=int(
+                segment.get("camera_id")
+                if segment.get("camera_id") is not None
+                else camera_id
+            ),
             filename=filename,
             start_time=segment["start_time"],
             end_time=segment["end_time"],
@@ -750,7 +743,12 @@ def start_camera_recording(
                 device_index=camera.device_index,
                 camera_type=camera_type,
                 rtsp_url=camera.rtsp_url,
-                on_segment_ready=save_recording_segment,
+                on_segment_ready=(
+                    lambda segment: save_recording_segment(
+                        segment,
+                        camera_id=camera.id,
+                    )
+                ),
             )
         )
 
@@ -794,8 +792,8 @@ def stop_camera_recording(
     camera_id: int
 ):
 
-    # Stop the recorder. It returns all finalized segments,
-    # including the final short segment.
+    # The recorder closes the final segment and invokes the same
+    # database callback used for 5-minute segment rollover.
     success, result = stop_recording(
         camera_id
     )
@@ -807,76 +805,51 @@ def stop_camera_recording(
             detail=result
         )
 
-    # --------------------------------------------------------
-    # SAVE ALL FINAL SEGMENTS TO POSTGRESQL
-    # --------------------------------------------------------
-    # The recorder returns final filenames after H.264 conversion.
-    # save_recording_segment() checks filename duplicates, so it is
-    # safe if an earlier automatic callback already saved a segment.
-
+    # Safety-save every completed segment returned by the recorder.
+    # Duplicate filenames are ignored by save_recording_segment().
     segments_saved = 0
-    segment_ids = []
 
-    for segment in result.get(
-        "segments",
-        []
-    ):
-
+    for segment in result.get("segments", []):
         saved_id = save_recording_segment(
-            segment
+            segment,
+            camera_id=camera_id,
         )
 
         if saved_id is not None:
-
-            segment_ids.append(
-                saved_id
-            )
-
             segments_saved += 1
 
     return {
         "message":
             "Recording stopped successfully",
-
         "camera_id":
             result["camera_id"],
-
         "start_time":
             result["start_time"],
-
         "end_time":
             result["end_time"],
-
         "duration_seconds":
             result["duration_seconds"],
-
         "format":
             result["format"],
-
         "camera_type":
             result.get(
                 "camera_type",
                 "USB",
             ),
-
         "segment_duration_seconds":
             result.get(
                 "segment_duration_seconds",
                 300,
             ),
-
         "segments":
             result.get(
                 "segments",
                 [],
             ),
-
         "segments_saved":
             segments_saved,
-
-        "segment_ids":
-            segment_ids,
     }
+
 
 
 # ============================================================

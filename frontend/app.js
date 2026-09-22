@@ -10,6 +10,12 @@
 
 const recordingCameras = new Set();
 
+// Automatic live-camera monitoring
+const cameraMonitorTimers = new Map();
+const cameraMonitorAttempts = new Map();
+const CAMERA_RETRY_DELAY = 3000;
+
+
 // Dynamic CCTV wall screen modes.
 const CAMERA_SCREEN_OPTIONS = [4, 8, 12, 16];
 
@@ -946,12 +952,25 @@ function startCameraTile(
     image.style.display =
         "block";
 
+    image.dataset.cameraMonitor = "active";
+
+    image.onload = () => {
+        setCameraTileOnline(cameraId);
+    };
+
+    image.onerror = () => {
+        handleCameraTileError(cameraId);
+    };
+
     if (noSignal) {
 
         noSignal.style.display =
             "none";
 
     }
+
+    setCameraTileConnecting(cameraId);
+    startCameraMonitoring(cameraId);
 
     if (buttonElement) {
 
@@ -967,6 +986,121 @@ function startCameraTile(
 
 }
 
+
+// ============================================================
+// AUTOMATIC CAMERA ONLINE/OFFLINE MONITORING
+// ============================================================
+
+function getCameraCard(cameraId) {
+    const image = document.getElementById(`camera-live-${cameraId}`);
+    return image ? image.closest(".camera-card") : null;
+}
+
+function setCameraTileStatus(cameraId, status) {
+    const card = getCameraCard(cameraId);
+    if (!card) return;
+
+    const badge = card.querySelector(".status-badge");
+
+    if (badge) {
+        badge.classList.remove("online", "offline", "reconnecting");
+        badge.classList.add(status);
+        badge.textContent = status.toUpperCase();
+    }
+
+    const liveLabel = card.querySelector(".camera-live-label");
+
+    if (liveLabel) {
+        liveLabel.textContent =
+            status === "online"
+                ? "LIVE VIEW"
+                : status === "reconnecting"
+                    ? "RECONNECTING..."
+                    : "OFFLINE";
+    }
+}
+
+function setCameraTileConnecting(cameraId) {
+    setCameraTileStatus(cameraId, "reconnecting");
+}
+
+function setCameraTileOnline(cameraId) {
+    cameraMonitorAttempts.set(Number(cameraId), 0);
+    setCameraTileStatus(cameraId, "online");
+}
+
+function setCameraTileOffline(cameraId) {
+    setCameraTileStatus(cameraId, "offline");
+}
+
+function handleCameraTileError(cameraId) {
+    const numericId = Number(cameraId);
+    const image = document.getElementById(`camera-live-${numericId}`);
+
+    if (!image || image.dataset.cameraMonitor !== "active") return;
+
+    cameraMonitorAttempts.set(
+        numericId,
+        (cameraMonitorAttempts.get(numericId) || 0) + 1
+    );
+
+    setCameraTileConnecting(numericId);
+
+    if (cameraMonitorTimers.has(numericId)) {
+        clearTimeout(cameraMonitorTimers.get(numericId));
+    }
+
+    const timer = setTimeout(() => {
+        const currentImage =
+            document.getElementById(`camera-live-${numericId}`);
+
+        if (!currentImage ||
+            currentImage.dataset.cameraMonitor !== "active") {
+            return;
+        }
+
+        currentImage.src =
+            `/video-feed/${numericId}?tile=${Date.now()}`;
+    }, CAMERA_RETRY_DELAY);
+
+    cameraMonitorTimers.set(numericId, timer);
+}
+
+function startCameraMonitoring(cameraId) {
+    const image =
+        document.getElementById(`camera-live-${cameraId}`);
+
+    if (!image) return;
+
+    image.dataset.cameraMonitor = "active";
+
+    image.onload = () => {
+        setCameraTileOnline(cameraId);
+    };
+
+    image.onerror = () => {
+        handleCameraTileError(cameraId);
+    };
+}
+
+function stopCameraMonitoring(cameraId) {
+    const numericId = Number(cameraId);
+    const image =
+        document.getElementById(`camera-live-${numericId}`);
+
+    if (image) {
+        image.dataset.cameraMonitor = "inactive";
+        image.onload = null;
+        image.onerror = null;
+    }
+
+    if (cameraMonitorTimers.has(numericId)) {
+        clearTimeout(cameraMonitorTimers.get(numericId));
+        cameraMonitorTimers.delete(numericId);
+    }
+
+    cameraMonitorAttempts.delete(numericId);
+}
 
 // ============================================================
 // START ALL CAMERA TILES
@@ -1161,6 +1295,8 @@ function stopCameraTileById(
 
     if (image) {
 
+        stopCameraMonitoring(cameraId);
+
         image.src = "";
 
         image.style.display =
@@ -1210,6 +1346,8 @@ function stopCameraTile(
 
 
     if (image) {
+
+        stopCameraMonitoring(cameraId);
 
         image.src = "";
 
@@ -1425,60 +1563,75 @@ async function loadRecordings() {
         return;
     }
 
-    recordingRefreshInProgress = true;
-
     const recordingList =
         document.getElementById(
             "recordingList"
         );
 
-
+    // Dashboard does not contain the recording list.
     if (!recordingList) {
-
         return;
-
     }
 
+    recordingRefreshInProgress = true;
 
     try {
 
         const response =
             await fetch(
-                "/recordings",
+                `/recordings?_t=${Date.now()}`,
                 {
                     cache: "no-store"
                 }
             );
 
-
         if (!response.ok) {
 
             throw new Error(
-                "Failed to load recordings"
+                `Failed to load recordings: ${response.status}`
             );
 
         }
 
-
-        const recordings =
+        let recordings =
             await response.json();
 
+        if (!Array.isArray(recordings)) {
+            recordings = [];
+        }
+
+        // Always show the newest recording first.
+        recordings.sort(
+            (a, b) => {
+
+                const idA =
+                    Number(a.id || 0);
+
+                const idB =
+                    Number(b.id || 0);
+
+                if (idA !== idB) {
+                    return idB - idA;
+                }
+
+                return String(
+                    b.start_time || ""
+                ).localeCompare(
+                    String(a.start_time || "")
+                );
+
+            }
+        );
 
         recordingList.innerHTML = "";
 
-
-        if (
-            !Array.isArray(recordings) ||
-            recordings.length === 0
-        ) {
+        if (recordings.length === 0) {
 
             recordingList.innerHTML =
                 "<p>No recordings found.</p>";
 
             return;
-
         }
-
 
         recordings.forEach(
             recording => {
@@ -1488,118 +1641,112 @@ async function loadRecordings() {
                         "div"
                     );
 
-
                 item.className =
                     "recording-item";
 
+                const status =
+                    String(
+                        recording.status || "-"
+                    ).toLowerCase();
+
+                const duration =
+                    recording.duration_seconds ?? 0;
 
                 item.innerHTML = `
 
-                    <div>
+                    <div class="recording-main">
 
-                        <strong>
-                            Recording #${recording.id}
-                        </strong>
+                        <div class="recording-title">
+                            <strong>
+                                Recording #${recording.id}
+                            </strong>
 
-                        <p>
-                            Camera ID:
-                            ${recording.camera_id}
-                        </p>
+                            <span class="recording-status ${escapeHtml(status)}">
+                                ${escapeHtml(status).toUpperCase()}
+                            </span>
+                        </div>
 
-                        <p>
-                            File:
-                            ${escapeHtml(
-                                recording.filename
-                            )}
-                        </p>
+                        <div class="recording-details">
 
-                        <p>
-                            Start:
-                            ${escapeHtml(
-                                recording.start_time || "-"
-                            )}
-                        </p>
+                            <span>
+                                <strong>Camera:</strong>
+                                ${escapeHtml(recording.camera_id)}
+                            </span>
 
-                        <p>
-                            End:
-                            ${escapeHtml(
-                                recording.end_time || "-"
-                            )}
-                        </p>
+                            <span class="recording-file">
+                                <strong>File:</strong>
+                                ${escapeHtml(recording.filename)}
+                            </span>
 
-                        <p>
-                            Duration:
-                            ${
-                                recording.duration_seconds ?? 0
-                            }
-                            seconds
-                        </p>
+                            <span>
+                                <strong>Start:</strong>
+                                ${escapeHtml(recording.start_time || "-")}
+                            </span>
 
-                        <p>
-                            Status:
-                            ${escapeHtml(
-                                recording.status || "-"
-                            )}
-                        </p>
+                            <span>
+                                <strong>End:</strong>
+                                ${escapeHtml(recording.end_time || "-")}
+                            </span>
+
+                            <span>
+                                <strong>Duration:</strong>
+                                ${escapeHtml(duration)} sec
+                            </span>
+
+                        </div>
 
                     </div>
 
-
                     <div class="recording-actions">
 
-    <button
-        type="button"
-        class="play-recording-button"
-        data-recording-id="${recording.id}"
-        data-recording-name="${escapeHtml(
-            recording.filename
-        )}"
-    >
-        ▶ Play
-    </button>
+                        <button
+                            type="button"
+                            class="play-recording-button"
+                            data-recording-id="${recording.id}"
+                        >
+                            ▶ Play
+                        </button>
 
-    <a
-        href="/recordings/${recording.id}/download"
-        class="download-recording-button"
-    >
-        ⬇ Download
-    </a>
+                        <a
+                            href="/recordings/${recording.id}/download"
+                            class="download-recording-button"
+                        >
+                            ↓ Download
+                        </a>
 
-</div>
+                    </div>
 
                 `;
-
 
                 recordingList.appendChild(
                     item
                 );
+
                 const playButton =
-    item.querySelector(
-        ".play-recording-button"
-    );
+                    item.querySelector(
+                        ".play-recording-button"
+                    );
 
+                if (playButton) {
 
-if (playButton) {
+                    playButton.addEventListener(
+                        "click",
+                        () => {
 
-    playButton.addEventListener(
-        "click",
-        () => {
+                            playRecording(
+                                recording.id,
+                                recording.filename
+                            );
 
-            playRecording(
-                recording.id,
-                recording.filename
-            );
+                        }
+                    );
 
-        }
-    );
-
-}
+                }
 
             }
         );
 
     }
-
 
     catch (error) {
 
@@ -1608,11 +1755,11 @@ if (playButton) {
             error
         );
 
-
         recordingList.innerHTML =
-            "<p>Unable to load recordings.</p>";
+            `<p>Unable to load recordings. ${escapeHtml(error.message)}</p>`;
 
     }
+
     finally {
 
         recordingRefreshInProgress = false;
@@ -1639,7 +1786,7 @@ function startRecordingHistoryRefresh() {
         () => {
             loadRecordings();
         },
-        3000
+        2000
     );
 
 }

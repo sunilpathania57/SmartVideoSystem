@@ -311,119 +311,7 @@
 
         }
 
-    
-        /* Recording session history */
-        .recording-session-item {
-            border: 1px solid #d8dde5;
-            border-radius: 8px;
-            padding: 12px;
-            margin-bottom: 8px;
-            background: #ffffff;
-        }
-
-        .recording-session-main {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-        }
-
-        .recording-session-info {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-            min-width: 0;
-        }
-
-        .recording-session-info > span {
-            font-size: 13px;
-        }
-
-        .recording-session-actions,
-        .recording-actions {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            flex-wrap: wrap;
-        }
-
-        .recording-session-details {
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #e3e7ed;
-        }
-
-        .session-details-header {
-            display: flex;
-            justify-content: space-between;
-            gap: 10px;
-            margin-bottom: 8px;
-            font-size: 13px;
-        }
-
-        .recording-segment-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-            padding: 8px 0;
-            border-top: 1px solid #edf0f4;
-        }
-
-        .recording-segment-info {
-            display: flex;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 8px;
-            min-width: 0;
-        }
-
-        .recording-segment-info > span {
-            font-size: 12px;
-        }
-
-        .recording-filename {
-            max-width: 360px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .recording-status {
-            font-weight: 600;
-        }
-
-        .recording-status.completed {
-            color: #16743a;
-        }
-
-        .recording-status.recording {
-            color: #b36b00;
-        }
-
-        .recording-status.failed {
-            color: #b42318;
-        }
-
-        @media (max-width: 800px) {
-            .recording-session-main,
-            .recording-segment-row {
-                align-items: flex-start;
-                flex-direction: column;
-            }
-
-            .recording-session-actions,
-            .recording-actions {
-                width: 100%;
-            }
-
-            .recording-filename {
-                max-width: 100%;
-            }
-        }
-
-</style>
+    </style>
 
 </head>
 
@@ -480,7 +368,7 @@
             <input
                 type="text"
                 id="recordingSearch"
-                placeholder="Search camera / filename..."
+                placeholder="Search filename..."
             >
 
             <input

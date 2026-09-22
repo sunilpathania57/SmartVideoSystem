@@ -1,9 +1,6 @@
-import cv2
+from time import sleep
 
-from backend.camera_manager import (
-    get_camera_stream,
-    remove_camera_stream,
-)
+import cv2
 
 
 # ============================================================
@@ -11,56 +8,78 @@ from backend.camera_manager import (
 # ============================================================
 
 def generate_camera_frames(
-    camera_id: int,
     camera_type: str,
     device_index: int | None = None,
-    rtsp_url: str | None = None,
+    rtsp_url: str | None = None
 ):
 
     # --------------------------------------------------------
-    # GET SHARED CAMERA STREAM
+    # SELECT VIDEO SOURCE
     # --------------------------------------------------------
 
-    stream = get_camera_stream(
-        camera_id=camera_id,
-        camera_type=camera_type,
-        device_index=device_index,
-        rtsp_url=rtsp_url,
-    )
+    if camera_type.upper() == "USB":
 
-    # --------------------------------------------------------
-    # START CAMERA
-    # --------------------------------------------------------
+        if device_index is None:
+            raise RuntimeError(
+                "USB camera does not have a device index."
+            )
 
-    if not stream.start():
+        source = device_index
+
+    elif camera_type.upper() == "IP":
+
+        if not rtsp_url:
+            raise RuntimeError(
+                "IP camera does not have an RTSP URL."
+            )
+
+        source = rtsp_url
+
+    else:
 
         raise RuntimeError(
-            stream.error
-            or "Could not start camera stream."
+            f"Unsupported camera type: {camera_type}"
         )
+
+
+    # --------------------------------------------------------
+    # OPEN CAMERA
+    # --------------------------------------------------------
+
+    camera = cv2.VideoCapture(source)
+
+    if not camera.isOpened():
+
+        raise RuntimeError(
+            f"Could not open video source: {source}"
+        )
+
+
+    # --------------------------------------------------------
+    # FRAME RATE
+    # --------------------------------------------------------
+
+    fps = camera.get(cv2.CAP_PROP_FPS)
+
+    if fps <= 0:
+        fps = 25
+
+    frame_delay = 1 / fps
+
 
     try:
 
         while True:
 
-            # ------------------------------------------------
-            # GET LATEST FRAME
-            # ------------------------------------------------
+            success, frame = camera.read()
 
-            frame = stream.get_frame()
+            if not success:
 
-            if frame is None:
+                break
 
-                continue
 
             # ------------------------------------------------
-            # COPY FRAME
-            # ------------------------------------------------
-
-            frame = frame.copy()
-
-            # ------------------------------------------------
-            # ADD APPLICATION INFORMATION
+            # Add application information
             # ------------------------------------------------
 
             cv2.putText(
@@ -70,8 +89,9 @@ def generate_camera_frames(
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.8,
                 (255, 255, 255),
-                2,
+                2
             )
+
 
             cv2.putText(
                 frame,
@@ -80,25 +100,28 @@ def generate_camera_frames(
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.7,
                 (0, 255, 0),
-                2,
+                2
             )
 
+
             # ------------------------------------------------
-            # CONVERT TO JPEG
+            # Convert to JPEG
             # ------------------------------------------------
 
             success, buffer = cv2.imencode(
                 ".jpg",
-                frame,
+                frame
             )
 
             if not success:
                 continue
 
+
             frame_bytes = buffer.tobytes()
 
+
             # ------------------------------------------------
-            # SEND MJPEG FRAME
+            # Send MJPEG frame
             # ------------------------------------------------
 
             yield (
@@ -108,12 +131,10 @@ def generate_camera_frames(
                 + b"\r\n"
             )
 
+
+            sleep(frame_delay)
+
+
     finally:
 
-        # ----------------------------------------------------
-        # STOP SHARED CAMERA
-        # ----------------------------------------------------
-
-        remove_camera_stream(
-            camera_id
-        )
+        camera.release()

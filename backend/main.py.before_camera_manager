@@ -105,21 +105,6 @@ def home():
         )
     )
 # ============================================================
-# ADD CAMERA PAGE
-# ============================================================
-
-@app.get(
-    "/add-camera",
-    include_in_schema=False
-)
-def add_camera_page():
-
-    return FileResponse(
-        str(
-            FRONTEND_DIR / "add-camera.html"
-        )
-    )
-# ============================================================
 # RECORDING HISTORY PAGE
 # ============================================================
 
@@ -160,6 +145,7 @@ def video_feed(
             .first()
         )
 
+
         if camera is None:
 
             raise HTTPException(
@@ -167,17 +153,27 @@ def video_feed(
                 detail="Camera not found"
             )
 
+
         return StreamingResponse(
+
             generate_camera_frames(
-                camera_id=camera.id,
-                camera_type=camera.camera_type,
-                device_index=camera.device_index,
-                rtsp_url=camera.rtsp_url
+
+                camera_type=
+                    camera.camera_type,
+
+                device_index=
+                    camera.device_index,
+
+                rtsp_url=
+                    camera.rtsp_url
+
             ),
+
             media_type=(
                 "multipart/x-mixed-replace;"
                 " boundary=frame"
             )
+
         )
 
     finally:

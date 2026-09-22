@@ -422,11 +422,9 @@ def _close_current_segment(
     end_time: datetime | None = None,
 ):
     """
-    Close the current segment exactly once.
-
-    The current segment is detached from the recording immediately
-    so that another cleanup path cannot finalize the same segment
-    twice.
+    Close the current segment, finalize the file, and then
+    notify the application/database callback with the FINAL
+    filename.
     """
 
     writer = recording.get(
@@ -436,37 +434,6 @@ def _close_current_segment(
     segment = recording.get(
         "current_segment"
     )
-
-    # --------------------------------------------------------
-    # Nothing to close
-    # --------------------------------------------------------
-
-    if segment is None:
-
-        if writer is not None:
-
-            try:
-                writer.release()
-            except Exception:
-                pass
-
-            recording["writer"] = None
-
-        return None
-
-    # --------------------------------------------------------
-    # CLAIM THE SEGMENT IMMEDIATELY
-    #
-    # This is important.
-    # If stop_recording() and the recording thread both reach
-    # this function, the second call will see None and return.
-    # --------------------------------------------------------
-
-    recording["current_segment"] = None
-
-    # --------------------------------------------------------
-    # RELEASE WRITER
-    # --------------------------------------------------------
 
     if writer is not None:
 
@@ -483,19 +450,16 @@ def _close_current_segment(
 
     recording["writer"] = None
 
-    # --------------------------------------------------------
-    # SET END TIME
-    # --------------------------------------------------------
+    if segment is None:
+
+        recording["current_segment"] = None
+        return None
 
     if segment["end_time"] is None:
 
         segment["end_time"] = (
             end_time or datetime.now()
         )
-
-    # --------------------------------------------------------
-    # CALCULATE DURATION
-    # --------------------------------------------------------
 
     segment["duration_seconds"] = max(
         0,
@@ -516,26 +480,16 @@ def _close_current_segment(
         f"{segment['frame_count']} frames)"
     )
 
-    # --------------------------------------------------------
-    # FINALIZE FILE
-    # --------------------------------------------------------
-
+    # Finalize the file BEFORE database callback.
     finalized_segment = _finalize_segment_file(
         segment
     )
-
-    # --------------------------------------------------------
-    # STORE FINALIZED SEGMENT
-    # --------------------------------------------------------
 
     recording["segments"].append(
         finalized_segment
     )
 
-    # --------------------------------------------------------
-    # SAVE TO DATABASE
-    # --------------------------------------------------------
-
+    # Save the FINAL filename to PostgreSQL.
     if finalized_segment["frame_count"] > 0:
 
         callback = recording.get(
@@ -557,7 +511,10 @@ def _close_current_segment(
                     f"{exc}"
                 )
 
+    recording["current_segment"] = None
+
     return finalized_segment
+
 
 # ============================================================
 # START RECORDING

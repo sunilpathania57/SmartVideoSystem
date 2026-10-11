@@ -291,25 +291,24 @@ main {
 .camera-live-preview {
     width: 100%;
     aspect-ratio: 16 / 9;
-
     background: #111111;
-
     overflow: hidden;
-
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    position: relative;
 }
 
 .camera-live-image {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
-
-    object-fit: cover;
+    object-fit: contain;
     background: #000000;
+    display: none;
 }
 
 .camera-no-signal {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
 
@@ -319,13 +318,7 @@ main {
     justify-content: center;
 
     gap: 4px;
-
-    color: #9ca3af;
-    background: #111827;
-
-    text-align: center;
 }
-
 .no-signal-icon {
     font-size: 20px;
 }

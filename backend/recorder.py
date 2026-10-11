@@ -6,7 +6,11 @@ import threading
 import time
 
 import cv2
-
+from backend.camera_manager import (
+    get_camera_stream,
+    remove_camera_stream,
+)
+from backend.camera_manager import get_camera_stream
 
 # ============================================================
 # PATHS
@@ -607,58 +611,70 @@ def start_recording(
         )
     )
 
-    # --------------------------------------------------------
-    # OPEN SOURCE
+       # --------------------------------------------------------
+    # GET SHARED CAMERA STREAM
     # --------------------------------------------------------
 
-    camera, open_error = _open_camera_source(
+    stream = get_camera_stream(
+        camera_id=camera_id,
         camera_type=normalized_type,
         device_index=device_index,
         rtsp_url=rtsp_url,
     )
 
-    if camera is None:
-        return (
-            False,
-            open_error
-            or "Could not create camera object.",
-        )
+    # --------------------------------------------------------
+    # START SHARED CAMERA
+    # --------------------------------------------------------
 
-    if not camera.isOpened():
+    if not stream.start():
 
-        camera.release()
+        remove_camera_stream(camera_id)
 
         return (
             False,
-            "Could not open camera or RTSP stream.",
+            stream.error
+            or "Could not start camera stream.",
         )
 
     # --------------------------------------------------------
-    # READ FIRST FRAME
+    # WAIT FOR FIRST FRAME
     # --------------------------------------------------------
 
-    success, first_frame = camera.read()
+    first_frame = None
+    first_frame_sequence = 0
 
-    if not success or first_frame is None:
+    first_frame_deadline = (
+        time.monotonic() + 5
+    )
 
-        camera.release()
+    while (
+        first_frame is None
+        and time.monotonic()
+        < first_frame_deadline
+    ):
+
+        first_frame, first_frame_sequence = stream.get_frame_with_sequence()
+
+        if first_frame is None:
+            time.sleep(0.05)
+
+    if first_frame is None:
+
+        remove_camera_stream(camera_id)
 
         return (
             False,
-            (
-                "Camera opened, but no video frame "
-                "was received."
-            ),
+            "Camera opened, but no video frame "
+            "was received.",
         )
 
     # --------------------------------------------------------
     # CAMERA SETTINGS
     # --------------------------------------------------------
 
-    width, height, fps = _get_video_settings(
-        camera,
-        first_frame=first_frame,
-    )
+    width = stream.width or 640
+    height = stream.height or 480
+    fps = stream.fps or 20.0
 
     print(
         f"Recording settings: "
@@ -674,7 +690,7 @@ def start_recording(
         "camera_type": normalized_type,
         "device_index": device_index,
         "rtsp_url": rtsp_url,
-        "camera": camera,
+        "stream": stream,
         "writer": None,
         "current_segment": None,
         "segments": [],
@@ -682,6 +698,7 @@ def start_recording(
         "start_time": datetime.now(),
         "running": True,
         "first_frame": first_frame,
+            "first_frame_sequence": first_frame_sequence,
         "width": width,
         "height": height,
         "fps": fps,
@@ -703,7 +720,7 @@ def start_recording(
 
     if writer is None:
 
-        camera.release()
+        remove_camera_stream(camera_id)
 
         return (
             False,
@@ -798,8 +815,8 @@ def _record_camera(
     if recording is None:
         return
 
-    camera = recording[
-        "camera"
+    stream = recording[
+        "stream"
     ]
 
     first_frame = recording.get(
@@ -807,6 +824,7 @@ def _record_camera(
     )
 
     frame_count = 0
+    last_frame_sequence = recording.get("first_frame_sequence", 0)
 
     # Monotonic clock is used for reliable segment timing.
     segment_started_monotonic = (
@@ -944,9 +962,12 @@ def _record_camera(
             # READ FRAME
             # ------------------------------------------------
 
-            success, frame = (
-                camera.read()
-            )
+            frame, frame_sequence = stream.get_frame_with_sequence()
+            if frame is not None:
+                if frame_sequence <= last_frame_sequence:
+                    time.sleep(0.005)
+                    continue
+                last_frame_sequence = frame_sequence
 
             # ------------------------------------------------
             # TEMPORARY FRAME-READ FAILURE RECOVERY
@@ -957,10 +978,7 @@ def _record_camera(
             # Retry temporary failures instead.
             # ------------------------------------------------
 
-            if (
-                not success
-                or frame is None
-            ):
+            if frame is None:
 
                 consecutive_failures = recording.get(
                     "consecutive_frame_failures",
@@ -1087,7 +1105,7 @@ def _record_camera(
             "running"
         ] = False
 
-        camera.release()
+        remove_camera_stream(camera_id)
 
         print(
             f"Camera {camera_id}: "

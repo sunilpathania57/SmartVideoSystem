@@ -35,6 +35,7 @@ class CameraStream:
         self.lock = threading.Lock()
 
         self.latest_frame = None
+        self.frame_sequence = 0
 
         self.width = 0
         self.height = 0
@@ -218,9 +219,8 @@ class CameraStream:
 
             with self.lock:
 
-                self.latest_frame = (
-                    frame.copy()
-                )
+                self.latest_frame = frame.copy()
+                self.frame_sequence += 1
 
         print(
             "CameraManager: capture loop "
@@ -239,6 +239,15 @@ class CameraStream:
                 return None
 
             return self.latest_frame.copy()
+
+    def get_frame_with_sequence(self):
+
+        with self.lock:
+
+            if self.latest_frame is None:
+                return None, self.frame_sequence
+
+            return self.latest_frame.copy(), self.frame_sequence
 
     # --------------------------------------------------------
     # STOP
@@ -279,9 +288,9 @@ class CameraStream:
 # ============================================================
 
 _camera_streams = {}
+_camera_stream_users = {}
 
 _registry_lock = threading.Lock()
-
 
 def get_camera_stream(
     camera_id: int,
@@ -292,9 +301,7 @@ def get_camera_stream(
 
     with _registry_lock:
 
-        stream = _camera_streams.get(
-            camera_id
-        )
+        stream = _camera_streams.get(camera_id)
 
         if stream is None:
 
@@ -304,9 +311,17 @@ def get_camera_stream(
                 rtsp_url=rtsp_url,
             )
 
-            _camera_streams[
-                camera_id
-            ] = stream
+            _camera_streams[camera_id] = stream
+            _camera_stream_users[camera_id] = 0
+
+        _camera_stream_users[camera_id] = (
+            _camera_stream_users.get(camera_id, 0) + 1
+        )
+
+        print(
+            f"CameraManager: camera {camera_id} "
+            f"users = {_camera_stream_users[camera_id]}"
+        )
 
         return stream
 
@@ -315,9 +330,41 @@ def remove_camera_stream(
     camera_id: int
 ):
 
+    stream = None
+
     with _registry_lock:
 
+        if camera_id not in _camera_streams:
+            return
+
+        current_users = _camera_stream_users.get(
+            camera_id,
+            0
+        )
+
+        current_users = max(
+            0,
+            current_users - 1
+        )
+
+        _camera_stream_users[camera_id] = current_users
+
+        print(
+            f"CameraManager: camera {camera_id} "
+            f"users = {current_users}"
+        )
+
+        # Do not stop the shared camera while
+        # another consumer is still using it.
+        if current_users > 0:
+            return
+
         stream = _camera_streams.pop(
+            camera_id,
+            None
+        )
+
+        _camera_stream_users.pop(
             camera_id,
             None
         )

@@ -128,14 +128,16 @@ async function loadCameras() {
         updateScreenModeDisplay(cameras.length);
 
 
-        cameras.forEach(camera => {
+        cameras.forEach((camera, index) => {
 
-            createCameraCard(
-                camera,
-                cameraList
-            );
+    camera.display_number = index + 1;
 
-        });
+    createCameraCard(
+        camera,
+        cameraList
+    );
+
+});
 
         // Keep four dashboard positions visible while testing.
         // Empty positions are visual placeholders only and are NOT
@@ -276,14 +278,18 @@ function setupScreenModeControls() {
 
             cameraList.innerHTML = "";
 
-            cameras.forEach(
-                camera => {
-                    createCameraCard(
-                        camera,
-                        cameraList
-                    );
-                }
-            );
+          cameras.forEach(
+    (camera, index) => {
+
+        camera.display_number = index + 1;
+
+        createCameraCard(
+            camera,
+            cameraList
+        );
+
+    }
+);
 
             addEmptyCameraSlots(
                 cameras.length,
@@ -359,7 +365,12 @@ function createCameraCard(
     camera,
     cameraList
 ) {
-
+    const displayNumber =
+        (window.smartVideoCameras || [])
+            .findIndex(
+                item =>
+                    Number(item.id) === Number(camera.id)
+            ) + 1;
     const cameraDiv =
         document.createElement("div");
 
@@ -428,7 +439,7 @@ function createCameraCard(
             <div class="camera-title-area">
 
                 <h3>
-                    CAM ${camera.id}
+                CAM ${displayNumber}
                 </h3>
 
             </div>
@@ -1385,10 +1396,8 @@ function stopCameraTile(
 
 async function startRecording(cameraId) {
 
-    // Stop the selected tile and large preview first.
-    // This prevents the same USB webcam from being opened twice.
-    stopCameraTileById(cameraId);
-    stopLiveCamera();
+    // Keep the current Live View and Live Tile active
+    // while recording starts.
 
 
     try {

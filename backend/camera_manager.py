@@ -182,50 +182,97 @@ class CameraStream:
         return True
 
     # --------------------------------------------------------
+   
+    # --------------------------------------------------------
+    # CAMERA RECONNECTION
+    # --------------------------------------------------------
+
+    def _reconnect_camera(self):
+        """Release a failed capture and retry opening the camera."""
+
+        print(
+            "CameraManager: attempting camera reconnection..."
+        )
+
+        old_capture = self.capture
+        self.capture = None
+
+        if old_capture is not None:
+            old_capture.release()
+
+        with self.lock:
+            self.latest_frame = None
+
+        while self.running:
+            if self.open():
+                print(
+                    "CameraManager: camera reconnected successfully."
+                )
+                return True
+
+            print(
+                "CameraManager: reconnection failed; "
+                "retrying in 3 seconds."
+            )
+
+            # Wait in short intervals so stopping can interrupt retries.
+            for _ in range(30):
+                if not self.running:
+                    return False
+                time.sleep(0.1)
+
+        return False
+
+    # --------------------------------------------------------
     # CAPTURE LOOP
     # --------------------------------------------------------
 
     def _capture_loop(self):
-
         consecutive_failures = 0
+        reconnect_after = 20
 
         while self.running:
+            capture = self.capture
 
-            success, frame = (
-                self.capture.read()
-            )
+            if capture is None or not capture.isOpened():
+                if not self._reconnect_camera():
+                    break
+
+                consecutive_failures = 0
+                continue
+
+            success, frame = capture.read()
 
             if not success or frame is None:
-
                 consecutive_failures += 1
 
                 if (
                     consecutive_failures == 1
-                    or
-                    consecutive_failures % 10 == 0
+                    or consecutive_failures % 10 == 0
                 ):
-
                     print(
-                        "CameraManager: "
-                        f"frame read failure "
+                        "CameraManager: frame read failure "
                         f"{consecutive_failures}"
                     )
 
-                time.sleep(0.05)
+                if consecutive_failures >= reconnect_after:
+                    if not self._reconnect_camera():
+                        break
 
+                    consecutive_failures = 0
+                    continue
+
+                time.sleep(0.05)
                 continue
 
             consecutive_failures = 0
 
             with self.lock:
-
                 self.latest_frame = frame.copy()
                 self.frame_sequence += 1
 
-        print(
-            "CameraManager: capture loop "
-            "stopped."
-        )
+        print("CameraManager: capture loop stopped.")
+
 
     # --------------------------------------------------------
     # GET LATEST FRAME
